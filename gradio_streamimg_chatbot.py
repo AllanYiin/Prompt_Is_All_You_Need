@@ -11,6 +11,7 @@ from utils.chatgpt_utils import *
 openai.api_key = os.getenv("OPENAI_API_KEY")
 URL = "https://api.openai.com/v1/chat/completions"
 
+pattern = regex.compile(r'\{(?:[^{}]|(?R))*\}')
 def index2context(idx:int):
     if idx is None or idx==0:
         return '[@PROMPT]'
