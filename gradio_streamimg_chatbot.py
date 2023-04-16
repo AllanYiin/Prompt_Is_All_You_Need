@@ -20,7 +20,7 @@ if "OPENAI_API_KEY" not in os.environ:
 openai.api_key = os.getenv("OPENAI_API_KEY")
 URL = "https://api.openai.com/v1/chat/completions"
 
-baseChatGpt=GptBaseApi()
+baseChatGpt=GptBaseApi(model="gpt-3.5-turbo")
 
 pattern = regex.compile(r'\{(?:[^{}]|(?R))*\}')
 def index2context(idx:int):
@@ -82,6 +82,36 @@ def nlu_api(text_input):
         yield '[' + ', '.join(results) + ']'
 
 
+def image_api(text_input):
+    # 創建與API的對話
+
+    _parameters = copy.deepcopy(baseChatGpt.API_PARAMETERS)
+    _parameters['temperature'] = 0.9
+    _parameters['max_tokens'] = 100
+    results=[]
+    conversation = [
+        {
+            "role": "system",
+            "content": "你是一個才華洋溢的DALLE-2 提示生成工具，你會根據接下來提供的視覺需求以及風格設計出對應的圖像配置，並且生成出能讓DALLE-2畫出符合需求的圖片之簡短prompt，為了節省字數，不一定要完整的句子，可以是一連串關鍵詞，無須打招互以及自我介紹，請確保圖像具備高解析度以及良好畫質，不要有文字出現在圖中以及要能夠吸引人類的目光，請用英語撰寫，絕對不要超過800 characters"
+        },
+        {
+            "role": "user",
+            "content": text_input
+        }
+    ]
+    image_prompt=baseChatGpt.post_and_get_answer(conversation, _parameters)
+    images_urls=baseChatGpt.generate_images(image_prompt)
+    # images_urls=["https://www.digitaltrends.com/wp-content/uploads/2022/10/Variation-on-DALL-E-2-Prompt.jpg?fit=720%2C720&p=1",
+    #             "https://www.digitaltrends.com/wp-content/uploads/2022/10/DALL-E-2-Image-on-OpenAI.jpg?p=1",
+    #             "https://www.google.com/url?sa=i&url=https%3A%2F%2Ffuturism.com%2Fthe-byte%2Fopenai-dall-e2-realistic-images-descriptions&psig=AOvVaw0gIVytXCfu7fj-5LCPA3dM&ust=1681743982221000&source=images&cd=vfe&ved=0CBEQjRxqFwoTCJiQl9fWrv4CFQAAAAAdAAAAABAQ",
+    #             "https://www.google.com/url?sa=i&url=https%3A%2F%2Fwww.reddit.com%2Fr%2FPokemonart%2Fcomments%2Fu05cci%2Fthis_was_generated_by_a_text_to_image_ai_dalle2%2F&psig=AOvVaw0gIVytXCfu7fj-5LCPA3dM&ust=1681743982221000&source=images&cd=vfe&ved=0CBEQjRxqFwoTCJiQl9fWrv4CFQAAAAAdAAAAABAY"]
+    return image_prompt,images_urls
+
+
+def clear_history():
+    baseChatGpt.FULL_HISTORY=[baseChatGpt.FULL_HISTORY[0]]
+    return [],baseChatGpt.FULL_HISTORY
+
 def reset_textbox():
     return gr.update(value='')
 
@@ -132,7 +162,20 @@ if __name__ == '__main__':
                         with gr.Column(scale=2):
                             nlu_output =gr.Text(label="回傳的JSON視覺化",interactive=True,max_lines=40).style(show_copy_button=True)
                     nlu_button = gr.Button("送出")
-
+            with gr.TabItem("Dall.E2"):
+                with gr.Column(variant="panel"):
+                    with gr.Row(variant="compact"):
+                        image_text = gr.Textbox(
+                            label="請輸入中文的描述",
+                            show_label=False,
+                            max_lines=1,
+                            placeholder="請輸入中文的描述",
+                        ).style(
+                            container=False,
+                        )
+                    image_btn = gr.Button("設計與生成圖片").style(full_width=False)
+                    image_prompt=gr.Markdown("")
+                    image_gallery = gr.Gallery(value=None,show_label=False).style(grid=4)
 
 
             # with gr.TabItem("翻譯"):
@@ -154,12 +197,15 @@ if __name__ == '__main__':
         inputs.submit(prompt_api, [inputs, context_type, top_p, temperature, top_k, frequency_penalty, state],
                       [chatbot, state,history_viewer]).then(reset_context, [], [context_type]).then(reset_textbox, [], [inputs])
         b1.click(prompt_api, [inputs, context_type, top_p, temperature, top_k, frequency_penalty, state], [chatbot, state,history_viewer], )
-        b3.click(reset_textbox, [], [inputs])
+        b3.click(clear_history, [], [chatbot,history_viewer]).then(reset_textbox, [], [inputs])
         b2.click(fn=pause_message, inputs=[], outputs=None)
 
 
-        nlu_inputs.submit(nlu_api, [nlu_inputs],[nlu_output])
-        nlu_button.click(nlu_api, [nlu_inputs], [nlu_output])
+        nlu_inputs.submit(nlu_api, nlu_inputs,nlu_output)
+        nlu_button.click(nlu_api, nlu_inputs, nlu_output)
+
+        image_text.submit(image_api, image_text,[image_prompt,image_gallery])
+        image_btn.click(image_api, image_text, [image_prompt,image_gallery])
 
         gr.Markdown(description)
-        demo.queue(concurrency_count=3,api_open=True).launch(debug=True)
+        demo.queue(concurrency_count=3,api_open=True).launch(show_error=True)
