@@ -27,3 +27,15 @@
 ### 目前這個專案未來希望實現: ###
 * 儲存思維鏈以及私有知識
 * 結合更多外部api
+
+### 如何開始使用: ###
+透過git將本專案下載至本機，並安裝相關requirements
+
+    git clone https://github.com/AllanYiin/Prompt_Is_All_You_Need
+    cd Prompt_Is_All_You_Need
+    pip install -r requirements.txt
+
+開啟gradio_streamimg_chatbot.py，請依照指示將金鑰值賦值至環境變數OPENAI_API_KEY
+執行gradio_streamimg_chatbot.py即可
+
+    python gradio_streamimg_chatbot.py

@@ -14,8 +14,9 @@ from utils.chatgpt_utils import process_context,process_chat
 
 # 設置您的OpenAI API金鑰
 #請將您的金鑰值寫入至環境變數"OPENAI_API_KEY"中
-#os.env("OPENAI_API_KEY")='你的金鑰值'
-
+#os.environ['OPENAI_API_KEY']=#'你的金鑰值'
+if "OPENAI_API_KEY" not in os.environ:
+    print("OPENAI_API_KEY  is not exists!")
 openai.api_key = os.getenv("OPENAI_API_KEY")
 URL = "https://api.openai.com/v1/chat/completions"
 
