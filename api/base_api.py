@@ -101,12 +101,12 @@ class GptBaseApi:
                     finish_reason = this_choice['finish_reason']
 
                     if 'content' in this_choice['delta']:
-                        if partial_words == '' and this_choice['delta']['content'] == '\n\n':
-                            pass
-                        elif this_choice['delta']['content'] == '\n\n':
-                            partial_words += '\n  '
-                        else:
-                            partial_words += this_choice['delta']['content']
+                        # if partial_words == '' and this_choice['delta']['content'] == '\n\n':
+                        #     pass
+                        # elif this_choice['delta']['content'] == '\n\n':
+                        #     partial_words += '\n  '
+                        # else:
+                        partial_words += this_choice['delta']['content']
 
                         if token_counter == 0:
                             full_history.append(
@@ -151,13 +151,12 @@ class GptBaseApi:
                             finish_reason = '[DONE]'
                             break
                         if 'content' in this_choice['delta']:
-                            if partial_words == '' and this_choice['delta']['content'] == '\n\n':
-                                pass
-                            elif this_choice['delta']['content'] == '\n\n':
-                                partial_words += '\n'
-                            else:
-                                partial_words += this_choice['delta']['content']
-                                # sys.stdout.write(this_choice['content'])
+                            # if partial_words == '' and this_choice['delta']['content'] == '\n\n':
+                            #     pass
+                            # elif this_choice['delta']['content'] == '\n\n':
+                            #     partial_words += '\n'
+                            # else:
+                            partial_words += this_choice['delta']['content']
                             if token_counter == 0:
                                 full_history.append(
                                     {"role": "assistant", "content": partial_words, "context_type": context_type})
