@@ -11,8 +11,10 @@
 * 歷史對話紀錄自動摘要(以縮減tokens數)
 * 超參數調整
 * ChatGPT inside的傳統自然語言處理任務
+* ChatGPT 與Dall.E2協作
 
 ![prompt](images/ui_2.png)
+![prompt](images/dalle2_1.png)
 
 ### 目前這個專案正在實現: ###
 * 更彈性的上下文管理機制，目前預計會有
