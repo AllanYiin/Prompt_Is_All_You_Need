@@ -7,6 +7,10 @@ import requests
 import math
 import sys
 import copy
+import numpy as np
+import cv2
+import PIL.Image as pil_image
+from base64 import b64decode
 import api.context_type as ContextType
 from utils.regex_utils import *
 from utils.chatgpt_utils import process_context,process_chat
@@ -182,12 +186,12 @@ class GptBaseApi:
                 # 自動以user角色要求「將此內容進行簡短摘要」的prompt需
                 print(len(partial_words))
 
-                prompt = "直接將以下內容進行摘要:" + partial_words
+                prompt = "將以下文字進行摘要: \n" + partial_words
                 # 調用openai.ChatCompletion.create來生成機器人的回答
                 _parameters=copy.deepcopy(self.API_PARAMETERS)
                 _parameters['temperature'] =0.1
                 _parameters['max_tokens']=len(partial_words)//2
-                message_context = self.process_context(prompt, ContextType.skip, full_history)
+                message_context = self.process_context(prompt, ContextType.sandbox, full_history)
                 print('\n[簡短摘要]\n',message_context)
                 self.parameters2payload(self.API_MODEL, message_context, _parameters)
                 request = requests.post(self.BASE_URL, headers=self.API_HEADERS, json=payload, stream=True)
@@ -261,9 +265,29 @@ class GptBaseApi:
             answer=response.choices[0].message['content'].strip()
             if full_history is not None:
                 full_history.append({"role": "assistant", "content": answer, "context_type": ContextType.prompt})
-
+            return response.choices[0].message['content'].strip()
         except Exception as e:
             return response.choices[0].message['content'].strip() + "\n" + str(e)
+
+
+    def generate_images(self,input_prompt):
+        response =openai.Image.create(
+            api_key=os.getenv("OPENAI_API_KEY"),
+            prompt=input_prompt,
+            response_format="b64_json",
+            n=4,
+            size="512x512"
+        )
+        images=[]
+        for index, image_dict in enumerate(response["data"]):
+            image_data=b64decode(image_dict["b64_json"])
+            image_data=cv2.imdecode(np.fromstring(image_data, dtype=np.uint8), cv2.IMREAD_COLOR)
+            image_file ="generate_images/{0}-{1}.png".format(response['created'],index)
+            images.append(image_data)
+            pil_image.fromarray(image_data, 'RGB').save(image_file)
+        return images
+
+
 
 
 
