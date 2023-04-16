@@ -1,18 +1,10 @@
 # -*- coding: utf-8-sig -*-
-import time
-import gradio as gr
-import os
-import json
-import requests
-import openai
-import copy
+import base64
+import io
 import regex
 import requests
-from bs4 import BeautifulSoup
-import PyPDF2
 from PIL import Image
-import io
-import base64
+from bs4 import BeautifulSoup
 
 __all__ = ['process_chat','process_url','process_context','build_message']
 def process_chat(conversation_dict: dict):
@@ -45,6 +37,7 @@ def process_url(url):
         text = soup.get_text()
         text_type = '網頁文字'
     elif 'application/pdf' in content_type:
+        import PyPDF2
         with io.BytesIO(response.content) as pdf_file:
             pdf_reader = PyPDF2.PdfReader(pdf_file)
             text = ''
@@ -69,7 +62,19 @@ def process_url(url):
     return text_type, text
 
 
+
+
 def build_message(role,content):
+    """
+    Build a chat message with the given role and content.
+
+    Args:
+    role (str): The role of the message sender, e.g., "system", "user", or "assistant".
+    content (str): The content of the message.
+
+    Returns:
+    dict: A dictionary containing the role and content of the message.
+    """
     return {"role": str(role), "content": str(content)}
 
 
@@ -77,3 +82,20 @@ def process_context(prompt, context_type,history: list):
     message_context = [build_message(message['role'],message['summary'] if message['role'] == 'assistant' and 'summary' in message else message['content']) for message in history]
     message_context.append({"role": "user", "content": extract_urls_text(prompt)})
     return message_context
+
+
+def parse_codeblock(text):
+    if "```" in text:
+        lines = text.split("\n")
+        for i, line in enumerate(lines):
+            if "```" in line:
+                if line != "```":
+                    lines[i] = f'<pre><code class="{lines[i][3:]}">'
+                else:
+                    lines[i] = '</code></pre>'
+            else:
+                if i > 0:
+                    lines[i] = "<br/>" + line.replace("<", "&lt;").replace(">", "&gt;")
+        return "".join(lines)
+    else:
+        return text
