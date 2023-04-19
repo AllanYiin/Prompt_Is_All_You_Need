@@ -10,8 +10,8 @@ from utils.regex_utils import *
 import api.context_type as ContextType
 from api.base_api import *
 from utils.chatgpt_utils import process_context,process_chat
-
-
+from gradio_chatbot_patch import Chatbot as grChatbot
+from gradio_css import code_highlight_css
 # 設置您的OpenAI API金鑰
 #請將您的金鑰值寫入至環境變數"OPENAI_API_KEY"中
 #os.environ['OPENAI_API_KEY']=#'你的金鑰值'
@@ -20,7 +20,30 @@ if "OPENAI_API_KEY" not in os.environ:
 openai.api_key = os.getenv("OPENAI_API_KEY")
 URL = "https://api.openai.com/v1/chat/completions"
 
+
+
+
+css = code_highlight_css + """
+pre {
+    white-space: pre-wrap;       /* Since CSS 2.1 */
+    white-space: -moz-pre-wrap;  /* Mozilla, since 1999 */
+    white-space: -pre-wrap;      /* Opera 4-6 */
+    white-space: -o-pre-wrap;    /* Opera 7 */
+    word-wrap: break-word;       /* Internet Explorer 5.5+ */
+}
+"""
+
+#
+# """col_container {width: 80%; margin-left: auto; margin-right: auto;}
+#                     #chatbot {height: 50%; overflow: auto;}
+#                     #history_viewer {height: 50%; overflow: auto;}"""
+
+
+
 baseChatGpt=GptBaseApi(model="gpt-3.5-turbo")
+
+role1ChatGpt=GptBaseApi(model="gpt-3.5-turbo")
+role2ChatGpt=GptBaseApi(model="gpt-3.5-turbo")
 
 pattern = regex.compile(r'\{(?:[^{}]|(?R))*\}')
 def index2context(idx:int):
@@ -53,8 +76,6 @@ def prompt_api(inputs, context_type, top_p, temperature, top_k, frequency_penalt
         except StopIteration:
             break
 
-
-
 def nlu_api(text_input):
     # 創建與API的對話
 
@@ -82,7 +103,7 @@ def nlu_api(text_input):
         yield '[' + ', '.join(results) + ']'
 
 
-def image_api(text_input):
+def image_api(text_input,image_size):
     # 創建與API的對話
 
     _parameters = copy.deepcopy(baseChatGpt.API_PARAMETERS)
@@ -100,12 +121,68 @@ def image_api(text_input):
         }
     ]
     image_prompt=baseChatGpt.post_and_get_answer(conversation, _parameters)
-    images_urls=baseChatGpt.generate_images(image_prompt)
-    # images_urls=["https://www.digitaltrends.com/wp-content/uploads/2022/10/Variation-on-DALL-E-2-Prompt.jpg?fit=720%2C720&p=1",
-    #             "https://www.digitaltrends.com/wp-content/uploads/2022/10/DALL-E-2-Image-on-OpenAI.jpg?p=1",
-    #             "https://www.google.com/url?sa=i&url=https%3A%2F%2Ffuturism.com%2Fthe-byte%2Fopenai-dall-e2-realistic-images-descriptions&psig=AOvVaw0gIVytXCfu7fj-5LCPA3dM&ust=1681743982221000&source=images&cd=vfe&ved=0CBEQjRxqFwoTCJiQl9fWrv4CFQAAAAAdAAAAABAQ",
-    #             "https://www.google.com/url?sa=i&url=https%3A%2F%2Fwww.reddit.com%2Fr%2FPokemonart%2Fcomments%2Fu05cci%2Fthis_was_generated_by_a_text_to_image_ai_dalle2%2F&psig=AOvVaw0gIVytXCfu7fj-5LCPA3dM&ust=1681743982221000&source=images&cd=vfe&ved=0CBEQjRxqFwoTCJiQl9fWrv4CFQAAAAAdAAAAABAY"]
+    images_urls=baseChatGpt.generate_images(image_prompt,text_input,image_size)
     return image_prompt,images_urls
+
+
+def interactive_loop_api(sys_gpt_input1,sys_gpt_input2,all_history):
+
+    conversation1 = [
+        {
+            "role": "system",
+            "content": sys_gpt_input1
+        },
+        {
+            "role": "user",
+            "content": sys_gpt_input1 if '/n' not in  sys_gpt_input1 else sys_gpt_input1.split('/n' )[-1]
+        }
+    ]
+
+    role1_answer=role1ChatGpt.post_and_get_answer(conversation1, _parameters)
+    role1ChatGpt.FULL_HISTORY=conversation1
+    all_history.append({
+            "role": "role1",
+            "content": role1_answer})
+
+    conversation2 = [
+        {
+            "role": "system",
+            "content": sys_gpt_input2
+        },
+        {
+            "role": "user",
+            "content": role1_answer
+        }
+    ]
+    role2_answer = role2ChatGpt.post_and_get_answer(conversation2, _parameters)
+    role2ChatGpt.FULL_HISTORY = conversation2
+    all_history.append({
+            "role": "role2",
+            "content": role2_answer})
+
+    seq=0
+
+    while True:
+        seq+=1
+        streaming_chat1 = role1ChatGpt.post_a_streaming_chat(role2_answer, ContextType.prompt, role1ChatGpt.API_PARAMETERS,role1ChatGpt.FULL_HISTORY)
+        all_history.append(role1ChatGpt.FULL_HISTORY[-1])
+        while True:
+            try:
+                chat, role1_answer, full_history = next(streaming_chat1)
+                yield chat, all_history, full_history
+            except StopIteration:
+                break
+
+        streaming_chat2 = role1ChatGpt.post_a_streaming_chat(role1_answer, ContextType.prompt,
+                                                             role1ChatGpt.API_PARAMETERS, role1ChatGpt.FULL_HISTORY)
+        all_history.append(role1ChatGpt.FULL_HISTORY[-1])
+        while True:
+            try:
+                chat, answer, full_history = next(streaming_chat1)
+                yield chat, all_history, full_history
+            except StopIteration:
+                break
+
 
 
 def clear_history():
@@ -127,14 +204,12 @@ if __name__ == '__main__':
     title = """<h1 align="center">🔥🤖ChatGPT Streaming 🚀</h1>"""
     description = ""
 
-    with gr.Blocks(css="""#col_container {width: 80%; margin-left: auto; margin-right: auto;}
-                    #chatbot {height: 50%; overflow: auto;}
-                    #history_viewer {height: 50%; overflow: auto;}""",theme=gr.themes.Soft(spacing_size="sm", radius_size="none",font=["Microsoft JhengHei UI", "Arial", "sans-serif"])) as demo:
+    with gr.Blocks(css=css,theme=gr.themes.Soft(spacing_size="sm", radius_size="none",font=["Microsoft JhengHei UI", "Arial", "sans-serif"])) as demo:
         gr.HTML(title)
         with gr.Tabs():
             with gr.TabItem("對話"):
                 with gr.Column(elem_id="col_container"):
-                    chatbot = gr.Chatbot(color_map=("orange", "dark gray"),elem_id='chatbot')  # c
+                    chatbot = grChatbot(elem_id='chatbot').style(height=550)  # c
                     with gr.Row():
                         radio = gr.Radio(["創意", "平衡", "精確"], show_label=False,interactive=True)
                         context_type = gr.Dropdown(
@@ -150,6 +225,16 @@ if __name__ == '__main__':
                         b3 = gr.Button(value='🗑️')
                         b2 = gr.Button(value='⏸️')
                     state = gr.State([{"role": "system", "content": '所有內容以繁體中文書寫'}])  # s
+                with gr.Accordion("超參數", open=False):
+                        top_p = gr.Slider(minimum=-0, maximum=1.0, value=0.95, step=0.05, interactive=True,
+                                          label="限制取樣範圍(Top-p)", )
+                        temperature = gr.Slider(minimum=-0, maximum=5.0, value=1, step=0.1, interactive=True,
+                                                label="溫度 (Temperature)", )
+                        top_k = gr.Slider(minimum=1, maximum=50, value=1, step=1, interactive=True,
+                                          label="候選結果個數(Top-k)", )
+                        frequency_penalty = gr.Slider(minimum=-2, maximum=2, value=0, step=0.01, interactive=True,
+                                                      label="重複性處罰(Frequency Penalty)",
+                                                      info='值域為-2~+2，數值越大，對於重複用字會給予懲罰，數值越負，則鼓勵重複用字')
             with gr.TabItem("歷史"):
                 with gr.Column(elem_id="col_container"):
                     history_viewer =gr.JSON(elem_id='history_viewer')
@@ -175,22 +260,35 @@ if __name__ == '__main__':
                         )
                     image_btn = gr.Button("設計與生成圖片").style(full_width=False)
                     image_prompt=gr.Markdown("")
-                    image_gallery = gr.Gallery(value=None,show_label=False).style(grid=4)
+                    image_gallery = gr.Gallery(value=None,show_label=False).style(columns=[4],object_fit="contain", height="auto")
+                with gr.Accordion("超參數", open=False):
+                    image_size=gr.Radio([256, 512, 1024], label="圖片尺寸",value=256)
+            with gr.TabItem("左右互搏"):
+                chatbot2 = grChatbot(elem_id='chatbot').style(height=550)
+                state2 = gr.State([{"role": "system", "content": '所有內容以繁體中文書寫'}])  # s
+                with gr.Row():
+                    with gr.Column(elem_id="col_container"):
+                        sys_gpt_input1 = gr.Textbox(placeholder="", label="ChatGPT1人設", lines=3)
+                        gpt_b1 = gr.Button(value='送出')
+                    with gr.Column(elem_id="col_container"):
+                        sys_gpt_input2 = gr.Textbox(placeholder="", label="ChatGPT2人設", lines=3)
+                        gpt_b2 = gr.Button(value='送出')
 
 
-            # with gr.TabItem("翻譯"):
+
+                    # with gr.TabItem("翻譯"):
             #     with gr.Column(elem_id="col_container"):
             #         history_viewer = gr.Text(elem_id='history_viewer',max_lines=30)
         # inputs, top_p, temperature, top_k, repetition_penalty
-        with gr.Accordion("超參數", open=False):
-            top_p = gr.Slider(minimum=-0, maximum=1.0, value=0.95, step=0.05, interactive=True,
-                              label="限制取樣範圍(Top-p)", )
-            temperature = gr.Slider(minimum=-0, maximum=5.0, value=1, step=0.1, interactive=True,
-                                    label="溫度 (Temperature)", )
-            top_k = gr.Slider(minimum=1, maximum=50, value=1, step=1, interactive=True, label="候選結果個數(Top-k)", )
-            frequency_penalty = gr.Slider(minimum=-2, maximum=2, value=0, step=0.01, interactive=True,
-                                          label="重複性處罰(Frequency Penalty)",
-                                          info='值域為-2~+2，數值越大，對於重複用字會給予懲罰，數值越負，則鼓勵重複用字')
+        # with gr.Accordion("超參數", open=False):
+        #     top_p = gr.Slider(minimum=-0, maximum=1.0, value=0.95, step=0.05, interactive=True,
+        #                       label="限制取樣範圍(Top-p)", )
+        #     temperature = gr.Slider(minimum=-0, maximum=5.0, value=1, step=0.1, interactive=True,
+        #                             label="溫度 (Temperature)", )
+        #     top_k = gr.Slider(minimum=1, maximum=50, value=1, step=1, interactive=True, label="候選結果個數(Top-k)", )
+        #     frequency_penalty = gr.Slider(minimum=-2, maximum=2, value=0, step=0.01, interactive=True,
+        #                                   label="重複性處罰(Frequency Penalty)",
+        #                                   info='值域為-2~+2，數值越大，對於重複用字會給予懲罰，數值越負，則鼓勵重複用字')
 
 
 
@@ -204,8 +302,8 @@ if __name__ == '__main__':
         nlu_inputs.submit(nlu_api, nlu_inputs,nlu_output)
         nlu_button.click(nlu_api, nlu_inputs, nlu_output)
 
-        image_text.submit(image_api, image_text,[image_prompt,image_gallery])
-        image_btn.click(image_api, image_text, [image_prompt,image_gallery])
+        image_text.submit(image_api, [image_text,image_size],[image_prompt,image_gallery])
+        image_btn.click(image_api, [image_text,image_size], [image_prompt,image_gallery])
 
         gr.Markdown(description)
-        demo.queue(concurrency_count=3,api_open=True).launch(show_error=True)
+        demo.queue(concurrency_count=3,api_open=True).launch(show_error=True, max_threads=200)

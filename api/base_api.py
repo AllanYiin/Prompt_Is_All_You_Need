@@ -14,6 +14,7 @@ from base64 import b64decode
 import api.context_type as ContextType
 from utils.regex_utils import *
 from utils.chatgpt_utils import process_context,process_chat
+
 class GptBaseApi:
     def __init__(self, url="https://api.openai.com/v1/chat/completions",model="gpt-3.5-turbo",temperature=0.5,system_message='所有內容以繁體中文書寫'):
         self.BASE_URL = url
@@ -270,22 +271,31 @@ class GptBaseApi:
             return response.choices[0].message['content'].strip() + "\n" + str(e)
 
 
-    def generate_images(self,input_prompt):
+    def generate_images(self,input_prompt, shorter_prompt=None,image_size=256):
         response =openai.Image.create(
             api_key=os.getenv("OPENAI_API_KEY"),
             prompt=input_prompt,
             response_format="b64_json",
             n=4,
-            size="512x512"
+            size="{0}x{1}".format(image_size,image_size)
         )
         images=[]
         for index, image_dict in enumerate(response["data"]):
             image_data=b64decode(image_dict["b64_json"])
             image_data=cv2.imdecode(np.fromstring(image_data, dtype=np.uint8), cv2.IMREAD_COLOR)
-            image_file ="generate_images/{0}-{1}.png".format(response['created'],index)
+            image_file = "generate_images/{0}-{1}.png".format(response['created'],  index)
+            if shorter_prompt is not None:
+                image_file ="generate_images/{0}-{1}-{2}.png".format(response['created'],replace_special_chars(shorter_prompt),index)
             images.append(image_data)
             pil_image.fromarray(image_data, 'RGB').save(image_file)
         return images
+
+    # def summary_text(self,):
+
+    def save_history(self, filename=None):
+        history_json=json.dumps(self.FULL_HISTORY, ensure_ascii=False, indent=4)
+    def load_history(self, filename=None):
+        history_json=json.dumps(self.FULL_HISTORY, ensure_ascii=False, indent=4)
 
 
 
