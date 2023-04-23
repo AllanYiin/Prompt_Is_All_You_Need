@@ -103,17 +103,17 @@ def nlu_api(text_input):
         yield '[' + ', '.join(results) + ']'
 
 
-def image_api(text_input,image_size):
+def image_api(text_input,image_size,temperature=1.2):
     # 創建與API的對話
 
     _parameters = copy.deepcopy(baseChatGpt.API_PARAMETERS)
-    _parameters['temperature'] = 0.9
+    _parameters['temperature'] =temperature
     _parameters['max_tokens'] = 100
     results=[]
     conversation = [
         {
             "role": "system",
-            "content": "你是一個才華洋溢的DALLE-2 提示生成工具，你會根據接下來提供的視覺需求以及風格設計出對應的圖像配置，並且生成出能讓DALLE-2畫出符合需求的圖片之簡短prompt，為了節省字數，不一定要完整的句子，可以是一連串關鍵詞，無須打招互以及自我介紹，請確保圖像具備高解析度以及良好畫質，不要有文字出現在圖中以及要能夠吸引人類的目光，請用英語撰寫，絕對不要超過800 characters"
+            "content": "你是一個才華洋溢的視覺設計師，你會根據提供的視覺需求以及風格設計出吸引人目光的構圖，並將構圖轉化成為DALL·E2 prompt。你懂得適時的運用視覺風格專有名詞、風格形容詞、畫家或現代平面設計師名字以及渲染手法來指導生成圖片的效果，生成的prompt不一定要完整的句子，也可以是一連串以逗號連接的視覺關鍵詞，請盡量將生成的prompt長度濃縮，但是如果只是將需求翻譯成英文，或是用打招呼、自我介紹或是與視覺無關的內容來充數，這是你職業道德不允許的行為。除非輸入需求有提到需要有文字，否則都不要有文字出現在圖中，請確保產生的圖像具備高解析度以及高質感，請用英語撰寫你生成的prompt，你生成的prompt長度絕對不要超過800 characters"
         },
         {
             "role": "user",
@@ -121,10 +121,37 @@ def image_api(text_input,image_size):
         }
     ]
     image_prompt=baseChatGpt.post_and_get_answer(conversation, _parameters)
+    if ':' in image_prompt:
+        image_prompt=' '.join(image_prompt.split(':')[1:])
     images_urls=baseChatGpt.generate_images(image_prompt,text_input,image_size)
     return image_prompt,images_urls
 
+def rewrite_api(text_input,style_name):
+    # 創建與API的對話
 
+    style_name=style_name.split('(')[0].strip()
+    _parameters = copy.deepcopy(baseChatGpt.API_PARAMETERS)
+    _parameters['temperature'] = 1.2
+    _parameters['frequency_penalty']=1.5
+    _parameters['presence_penalty'] = 0.5
+    results=[]
+    conversation = [
+        {
+            "role": "system",
+            "content": "你是一個寫作風格專家，使用繁體中文書寫"
+        },
+        {
+            "role": "user",
+            "content": "{0}\n套用{1}的寫作風格來改寫以下文字，包括文字中原有的形容詞也應該要全數替代為符合{2}風格的詞彙".format(text_input,style_name,style_name)
+        }
+    ]
+    streaming_answer = baseChatGpt.post_and_get_streaming_answer(conversation, _parameters,baseChatGpt.FULL_HISTORY)
+    while True:
+        try:
+            answer, full_history = next(streaming_answer)
+            yield answer
+        except StopIteration:
+            break
 def interactive_loop_api(sys_gpt_input1,sys_gpt_input2,all_history):
 
     conversation1 = [
@@ -201,7 +228,7 @@ def pause_message():
 
 if __name__ == '__main__':
 
-    title = """<h1 align="center">🔥🤖ChatGPT Streaming 🚀</h1>"""
+    title = """<h1 align="center">🔥🤖Prompt is All You Need! 🚀</h1>"""
     description = ""
 
     with gr.Blocks(css=css,theme=gr.themes.Soft(spacing_size="sm", radius_size="none",font=["Microsoft JhengHei UI", "Arial", "sans-serif"])) as demo:
@@ -228,7 +255,7 @@ if __name__ == '__main__':
                 with gr.Accordion("超參數", open=False):
                         top_p = gr.Slider(minimum=-0, maximum=1.0, value=0.95, step=0.05, interactive=True,
                                           label="限制取樣範圍(Top-p)", )
-                        temperature = gr.Slider(minimum=-0, maximum=5.0, value=1, step=0.1, interactive=True,
+                        temperature = gr.Slider(minimum=-0, maximum=2.0, value=1, step=0.1, interactive=True,
                                                 label="溫度 (Temperature)", )
                         top_k = gr.Slider(minimum=1, maximum=50, value=1, step=1, interactive=True,
                                           label="候選結果個數(Top-k)", )
@@ -262,17 +289,148 @@ if __name__ == '__main__':
                     image_prompt=gr.Markdown("")
                     image_gallery = gr.Gallery(value=None,show_label=False).style(columns=[4],object_fit="contain", height="auto")
                 with gr.Accordion("超參數", open=False):
-                    image_size=gr.Radio([256, 512, 1024], label="圖片尺寸",value=256)
-            with gr.TabItem("左右互搏"):
-                chatbot2 = grChatbot(elem_id='chatbot').style(height=550)
-                state2 = gr.State([{"role": "system", "content": '所有內容以繁體中文書寫'}])  # s
-                with gr.Row():
-                    with gr.Column(elem_id="col_container"):
-                        sys_gpt_input1 = gr.Textbox(placeholder="", label="ChatGPT1人設", lines=3)
-                        gpt_b1 = gr.Button(value='送出')
-                    with gr.Column(elem_id="col_container"):
-                        sys_gpt_input2 = gr.Textbox(placeholder="", label="ChatGPT2人設", lines=3)
-                        gpt_b2 = gr.Button(value='送出')
+                    temperature2 = gr.Slider(minimum=-0, maximum=2.0, value=1.1, step=0.1, interactive=True,label="溫度 (Temperature)", )
+                    image_size=gr.Radio([256, 512, 1024], label="圖片尺寸",value=512)
+            with gr.TabItem("風格改寫"):
+                with gr.Column(elem_id="col_container"):
+                    rewrite_dropdown=gr.Dropdown(
+                        ["抽象 (Abstract)",
+                            "冒險 (Adventurous)",
+                            "比喻體 (Allegorical)",
+                            "曖昧 (Ambiguous)",
+                            "擬人化 (Anthropomorphic)",
+                            "對比 (Antithetical)",
+                            "領悟 (Aphoristic)",
+                            "思辯 (Argumentative)",
+                            "聲音式 (Auditory)",
+                            "喚醒 (Awakening)",
+                            "無邊際 (Boundless)",
+                            "突破 (Breakthrough)",
+                            "古典 (Classical)",
+                            "口語 (Colloquial)",
+                            "逆袭 (Comeback)",
+                            "喜劇 (Comedic)",
+                            "舒適 (Comforting)",
+                            "簡潔 (Concise)",
+                            "自信 (Confident)",
+                            "體悟 (Contemplative)",
+                            "反向思考 (Counterintuitive)",
+                            "勇敢 (Courageous)",
+                            "創意無限 (Creative)",
+                            "深奧 (Cryptic)",
+                            "可愛 (Cute)",
+                            "飛舞 (Dancing)",
+                            "燦爛 (Dazzling)",
+                            "細緻 (Delicate)",
+                            "描繪 (Descriptive)",
+                            "冷漠 (Detached)",
+                            "保持距離 (Distant)",
+                            "夢幻 (Dreamy)",
+                            "優雅 (Elegant)",
+                            "感性 (Emotional)",
+                            "迷人 (Enchanting)",
+                            "無盡 (Endless)",
+                            "隱喻 (Euphemistic)",
+                            "精緻 (Exquisite)",
+                            "充滿信念 (Faithful)",
+                            "無畏 (Fearless)",
+                            "無懈可擊 (Flawless)",
+                            "靈活 (Flexible)",
+                            "正式 (Formal)",
+                            "自由 (Free Verse)",
+                            "未來主義 (Futuristic)",
+                            "天賦異禀 (Gifted)",
+                            "壯麗 (Grandiose)",
+                            "溫馨 (Heartwarming)",
+                            "豪邁 (Heroic)",
+                            "幽默 (Humorous)",
+                            "誇張 (Hyperbolic)",
+                            "個性化 (Idiomatic)",
+                            "獨立 (Independent)",
+                            "強烈 (Intense)",
+                            "問答 (Interrogative)",
+                            "疑問 (Interrogative)",
+                            "道出内心 (Introspective)",
+                            "反諷 (Ironic)",
+                            "歡樂 (Joyful)",
+                            "傳奇 (Legendary)",
+                            "人生哲理 (Life Wisdom)",
+                            "抒情 (Lyric)",
+                            "魔幻 (Magical)",
+                            "隱喻 (Metonymic)",
+                            "現代 (Modern)",
+                            "神秘 (Mysterious)",
+                            "敘事 (Narrative)",
+                            "自然主義 (Naturalistic)",
+                            "高貴 (Noble)",
+                            "懷舊 (Nostalgic)",
+                            "客觀 (Objective)",
+                            "原聲 (Onomatopoeic)",
+                            "充滿激情 (Passionate)",
+                            "激情 (Passionate)",
+                            "個人 (Personal)",
+                            "哲學 (Philosophical)",
+                            "淺白 (Plain)",
+                            "俏皮 (Playful)",
+                            "詩意 (Poetic)",
+                            "正能量 (Positive)",
+                            "實用主義 (Pragmatic)",
+                            "頌揚 (Praising)",
+                            "亮麗 (Radiant)",
+                            "叛逆 (Rebellious)",
+                            "高雅 (Refined)",
+                            "文藝復興 (Renaissance)",
+                            "復古 (Retro)",
+                            "啟示 (Revelatory)",
+                            "革命 (Revolutionary)",
+                            "修辭 (Rhetorical)",
+                            "諷刺 (Satirical)",
+                            "科幻 (Science Fiction)",
+                            "魅惑 (Seductive)",
+                            "聳人聽聞 (Sensational)",
+                            "感傷 (Sentimental)",
+                            "銳利 (Sharp)",
+                            "疑問 (Skeptical)",
+                            "社會評論 (Social Commentary)",
+                            "嚴肅 (Solemn)",
+                            "心靈 (Soulful)",
+                            "靈性 (Spiritual)",
+                            "主觀 (Subjective)",
+                            "奇幻 (Surreal)",
+                            "懸疑 (Suspenseful)",
+                            "象徵 (Symbolic)",
+                            "道家 (Taoist)",
+                            "格調 (Tone)",
+                            "傳統 (Traditional)",
+                            "超凡脫俗 (Transcendent)",
+                            "過渡 (Transitional)",
+                            "流行 (Trendy)",
+                            "從容 (Unhurried)",
+                            "奔放 (Unrestrained)",
+                            "充滿活力 (Vibrant)",
+                            "漫遊式 (Wandering)",
+                            "溫暖 (Warm)",
+                            "充滿智慧 (Wise)",
+                            "俏皮 (Witty)",
+                            "瑜珈式 (Yogic)",
+                            "青春 (Youthful)"], value="正式 (Formal)", multiselect=False, label="改寫文字風格形容詞",interactive=True)
+                    gr.Markdown("將文本輸入到下面的方塊中，選取改寫風格後，點選改寫後即可將文字基於選取風格進行改寫")
+                    with gr.Row():
+                        with gr.Column(scale=1):
+                            rewrite_inputs = gr.Textbox(lines=30, placeholder="輸入句子...")
+                        with gr.Column(scale=1):
+                            rewrite_output =gr.Text(label="改寫",interactive=True,lines=30).style(show_copy_button=True)
+                    rewrite_button = gr.Button("送出")
+            # with gr.TabItem("左右互搏"):
+            #     chatbot2 = grChatbot(elem_id='chatbot').style(height=550)
+            #     state2 = gr.State([{"role": "system", "content": '所有內容以繁體中文書寫'}])  # s
+            #     with gr.Row():
+            #         with gr.Column(elem_id="col_container"):
+            #             sys_gpt_input1 = gr.Textbox(placeholder="", label="ChatGPT1人設", lines=3)
+            #             gpt_b1 = gr.Button(value='送出')
+            #         with gr.Column(elem_id="col_container"):
+            #             sys_gpt_input2 = gr.Textbox(placeholder="", label="ChatGPT2人設", lines=3)
+            #             gpt_b2 = gr.Button(value='送出')
 
 
 
@@ -294,7 +452,7 @@ if __name__ == '__main__':
 
         inputs.submit(prompt_api, [inputs, context_type, top_p, temperature, top_k, frequency_penalty, state],
                       [chatbot, state,history_viewer]).then(reset_context, [], [context_type]).then(reset_textbox, [], [inputs])
-        b1.click(prompt_api, [inputs, context_type, top_p, temperature, top_k, frequency_penalty, state], [chatbot, state,history_viewer], )
+        b1.click(prompt_api, [inputs, context_type, top_p, temperature, top_k, frequency_penalty, state], [chatbot, state,history_viewer]).then(reset_context, [], [context_type]).then(reset_textbox, [], [inputs])
         b3.click(clear_history, [], [chatbot,history_viewer]).then(reset_textbox, [], [inputs])
         b2.click(fn=pause_message, inputs=[], outputs=None)
 
@@ -302,8 +460,11 @@ if __name__ == '__main__':
         nlu_inputs.submit(nlu_api, nlu_inputs,nlu_output)
         nlu_button.click(nlu_api, nlu_inputs, nlu_output)
 
-        image_text.submit(image_api, [image_text,image_size],[image_prompt,image_gallery])
-        image_btn.click(image_api, [image_text,image_size], [image_prompt,image_gallery])
+        image_text.submit(image_api, [image_text,image_size,temperature2],[image_prompt,image_gallery])
+        image_btn.click(image_api, [image_text,image_size,temperature2], [image_prompt,image_gallery])
+
+        rewrite_inputs.submit(rewrite_api, [rewrite_inputs,rewrite_dropdown],rewrite_output)
+        rewrite_button.click(rewrite_api, [rewrite_inputs,rewrite_dropdown], rewrite_output)
 
         gr.Markdown(description)
         demo.queue(concurrency_count=3,api_open=True).launch(show_error=True, max_threads=200)
