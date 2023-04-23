@@ -142,10 +142,10 @@ def rewrite_api(text_input,style_name):
         },
         {
             "role": "user",
-            "content": "{0}\n套用{1}的寫作風格來改寫以下文字，包括文字中原有的形容詞也應該要全數替代為符合{2}風格的詞彙".format(text_input,style_name,style_name)
+            "content": "{0}\n套用{1}的寫作風格來改寫上述文字，包括文字中原有的形容詞也應該要全數替代為符合{2}風格的詞彙".format(text_input,style_name,style_name)
         }
     ]
-    streaming_answer = baseChatGpt.post_and_get_streaming_answer(conversation, _parameters,baseChatGpt.FULL_HISTORY)
+    streaming_answer = baseChatGpt.post_and_get_streaming_answer(conversation, _parameters,conversation)
     while True:
         try:
             answer, full_history = next(streaming_answer)
