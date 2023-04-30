@@ -5,6 +5,7 @@ import regex
 import gradio as gr
 import openai
 import requests
+from datetime import datetime
 from utils.chatgpt_utils import *
 from utils.regex_utils import *
 import api.context_type as ContextType
@@ -44,6 +45,8 @@ baseChatGpt=GptBaseApi(model="gpt-3.5-turbo")
 
 role1ChatGpt=GptBaseApi(model="gpt-3.5-turbo")
 role2ChatGpt=GptBaseApi(model="gpt-3.5-turbo")
+role1ChatGpt.API_PARAMETERS['temperature'] = 0.5
+role2ChatGpt.API_PARAMETERS['temperature'] = 0.5
 
 pattern = regex.compile(r'\{(?:[^{}]|(?R))*\}')
 def index2context(idx:int):
@@ -113,7 +116,7 @@ def image_api(text_input,image_size,temperature=1.2):
     conversation = [
         {
             "role": "system",
-            "content": "你是一個才華洋溢的視覺設計師，你會根據提供的視覺需求以及風格設計出吸引人目光的構圖，並將構圖轉化成為DALL·E2 prompt。你懂得適時的運用視覺風格專有名詞、風格形容詞、畫家或現代平面設計師名字以及渲染手法來指導生成圖片的效果，生成的prompt不一定要完整的句子，也可以是一連串以逗號連接的視覺關鍵詞，請盡量將生成的prompt長度濃縮，但是如果只是將需求翻譯成英文，或是用打招呼、自我介紹或是與視覺無關的內容來充數，這是你職業道德不允許的行為。除非輸入需求有提到需要有文字，否則都不要有文字出現在圖中，請確保產生的圖像具備高解析度以及高質感，請用英語撰寫你生成的prompt，你生成的prompt長度絕對不要超過800 characters"
+            "content": "你是一個才華洋溢的視覺藝術設計師以及DALLE-2提示專家，你會根據輸入的視覺需求以及風格設計出吸引人的視覺構圖，並懂得適時的運用視覺風格專有名詞、視覺風格形容詞、畫家或視覺藝術家名字以及各種渲染效果名稱來指導生成圖片的效果，並擅長將構圖轉化成為DALLE-2影像生成模型能理解的prompt，如果只是將輸入需求直接翻譯成英文，或是用打招呼、自我介紹或是與視覺無關的內容來充數，這是你職業道德不允許的行為。請確保產生的圖像具備高解析度以及高質感以及包含構圖中的視覺細節，只需要回覆我prompt的本體即可，不需要解釋輸入需求文字的意義，prompt內只會保留會出現在影像中的物體以及其他視覺有關的文字描述，prompt本體以\"An image\"開始，你生成的prompt長度絕對不要超過800 characters, 請用英語撰寫"
         },
         {
             "role": "user",
@@ -142,7 +145,7 @@ def rewrite_api(text_input,style_name):
         },
         {
             "role": "user",
-            "content": "{0}\n套用{1}的寫作風格來改寫上述文字，包括文字中原有的形容詞也應該要全數替代為符合{2}風格的詞彙".format(text_input,style_name,style_name)
+            "content": "套用{0}的風格來改寫以下文字:\n{1}".format(style_name,text_input)
         }
     ]
     streaming_answer = baseChatGpt.post_and_get_streaming_answer(conversation, _parameters,conversation)
@@ -152,63 +155,7 @@ def rewrite_api(text_input,style_name):
             yield answer
         except StopIteration:
             break
-def interactive_loop_api(sys_gpt_input1,sys_gpt_input2,all_history):
 
-    conversation1 = [
-        {
-            "role": "system",
-            "content": sys_gpt_input1
-        },
-        {
-            "role": "user",
-            "content": sys_gpt_input1 if '/n' not in  sys_gpt_input1 else sys_gpt_input1.split('/n' )[-1]
-        }
-    ]
-
-    role1_answer=role1ChatGpt.post_and_get_answer(conversation1, _parameters)
-    role1ChatGpt.FULL_HISTORY=conversation1
-    all_history.append({
-            "role": "role1",
-            "content": role1_answer})
-
-    conversation2 = [
-        {
-            "role": "system",
-            "content": sys_gpt_input2
-        },
-        {
-            "role": "user",
-            "content": role1_answer
-        }
-    ]
-    role2_answer = role2ChatGpt.post_and_get_answer(conversation2, _parameters)
-    role2ChatGpt.FULL_HISTORY = conversation2
-    all_history.append({
-            "role": "role2",
-            "content": role2_answer})
-
-    seq=0
-
-    while True:
-        seq+=1
-        streaming_chat1 = role1ChatGpt.post_a_streaming_chat(role2_answer, ContextType.prompt, role1ChatGpt.API_PARAMETERS,role1ChatGpt.FULL_HISTORY)
-        all_history.append(role1ChatGpt.FULL_HISTORY[-1])
-        while True:
-            try:
-                chat, role1_answer, full_history = next(streaming_chat1)
-                yield chat, all_history, full_history
-            except StopIteration:
-                break
-
-        streaming_chat2 = role1ChatGpt.post_a_streaming_chat(role1_answer, ContextType.prompt,
-                                                             role1ChatGpt.API_PARAMETERS, role1ChatGpt.FULL_HISTORY)
-        all_history.append(role1ChatGpt.FULL_HISTORY[-1])
-        while True:
-            try:
-                chat, answer, full_history = next(streaming_chat1)
-                yield chat, all_history, full_history
-            except StopIteration:
-                break
 
 
 
@@ -289,7 +236,7 @@ if __name__ == '__main__':
                     image_prompt=gr.Markdown("")
                     image_gallery = gr.Gallery(value=None,show_label=False).style(columns=[4],object_fit="contain", height="auto")
                 with gr.Accordion("超參數", open=False):
-                    temperature2 = gr.Slider(minimum=-0, maximum=2.0, value=1.1, step=0.1, interactive=True,label="溫度 (Temperature)", )
+                    temperature2 = gr.Slider(minimum=-0, maximum=2.0, value=0.7, step=0.1, interactive=True,label="溫度 (Temperature)", )
                     image_size=gr.Radio([256, 512, 1024], label="圖片尺寸",value=512)
             with gr.TabItem("風格改寫"):
                 with gr.Column(elem_id="col_container"):
@@ -421,32 +368,6 @@ if __name__ == '__main__':
                         with gr.Column(scale=1):
                             rewrite_output =gr.Text(label="改寫",interactive=True,lines=30).style(show_copy_button=True)
                     rewrite_button = gr.Button("送出")
-            # with gr.TabItem("左右互搏"):
-            #     chatbot2 = grChatbot(elem_id='chatbot').style(height=550)
-            #     state2 = gr.State([{"role": "system", "content": '所有內容以繁體中文書寫'}])  # s
-            #     with gr.Row():
-            #         with gr.Column(elem_id="col_container"):
-            #             sys_gpt_input1 = gr.Textbox(placeholder="", label="ChatGPT1人設", lines=3)
-            #             gpt_b1 = gr.Button(value='送出')
-            #         with gr.Column(elem_id="col_container"):
-            #             sys_gpt_input2 = gr.Textbox(placeholder="", label="ChatGPT2人設", lines=3)
-            #             gpt_b2 = gr.Button(value='送出')
-
-
-
-                    # with gr.TabItem("翻譯"):
-            #     with gr.Column(elem_id="col_container"):
-            #         history_viewer = gr.Text(elem_id='history_viewer',max_lines=30)
-        # inputs, top_p, temperature, top_k, repetition_penalty
-        # with gr.Accordion("超參數", open=False):
-        #     top_p = gr.Slider(minimum=-0, maximum=1.0, value=0.95, step=0.05, interactive=True,
-        #                       label="限制取樣範圍(Top-p)", )
-        #     temperature = gr.Slider(minimum=-0, maximum=5.0, value=1, step=0.1, interactive=True,
-        #                             label="溫度 (Temperature)", )
-        #     top_k = gr.Slider(minimum=1, maximum=50, value=1, step=1, interactive=True, label="候選結果個數(Top-k)", )
-        #     frequency_penalty = gr.Slider(minimum=-2, maximum=2, value=0, step=0.01, interactive=True,
-        #                                   label="重複性處罰(Frequency Penalty)",
-        #                                   info='值域為-2~+2，數值越大，對於重複用字會給予懲罰，數值越負，則鼓勵重複用字')
 
 
 
