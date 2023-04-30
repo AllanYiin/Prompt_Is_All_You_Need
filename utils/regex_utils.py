@@ -14,3 +14,11 @@ def replace_special_chars(input_str):
 
     return result
 
+
+def extract_score(text):
+    pattern = r"(\d+)分"
+    result = regex.search(pattern, text)
+    if result:
+        return int(result.group(1))
+    else:
+        return None
