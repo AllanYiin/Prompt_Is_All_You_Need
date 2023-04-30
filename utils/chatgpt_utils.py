@@ -13,6 +13,8 @@ def process_chat(conversation_dict: dict):
         return '😲:\n' + conversation_dict['content'] + "\n"
     elif conversation_dict['role'] == 'assistant':
         return '🤖:\n' + conversation_dict['content'] + "\n"
+    elif conversation_dict['role'] == 'system':
+        return '💡:\n' + conversation_dict['content'] + "\n"
 
 def extract_urls_text(text):
     url_pattern = regex.compile(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+')
