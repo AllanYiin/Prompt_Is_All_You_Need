@@ -1,8 +1,16 @@
 import json
 import uuid
 import os
-import regex
 import openai
+import openai_async
+
+
+import asyncio
+import nest_asyncio
+nest_asyncio.apply()
+
+
+import regex
 import requests
 import math
 import sys
@@ -54,6 +62,8 @@ class GptBaseApi:
             message['content']) for message in full_history]
         message_context.append({"role": "user", "content": prompt})
         return message_context
+
+
     def parameters2payload(self,model,message_with_context,parameters):
         payload = {
             "model": model,
@@ -183,53 +193,17 @@ class GptBaseApi:
             # 檢查接續後的完整回覆是否過長
             # print('bot_output: ',len(bot_output))
 
-            # if len(partial_words) > 500:
-            #     # 自動以user角色要求「將此內容進行簡短摘要」的prompt需
-            #     print(len(partial_words))
-            #
-            #     prompt = "將以下文字進行摘要: \n" + partial_words
-            #     # 調用openai.ChatCompletion.create來生成機器人的回答
-            #     _parameters=copy.deepcopy(self.API_PARAMETERS)
-            #     _parameters['temperature'] =0.1
-            #     _parameters['max_tokens']=len(partial_words)//2
-            #     message_context = self.process_context(prompt, ContextType.sandbox, full_history)
-            #     print('\n[簡短摘要]\n',message_context)
-            #     self.parameters2payload(self.API_MODEL, message_context, _parameters)
-            #     request = requests.post(self.BASE_URL, headers=self.API_HEADERS, json=payload, stream=True)
-            #     summary = ''
-            #     finish_reason = 'None'
-            #     # client = sseclient.SSEClient(request)
-            #     for chunk in request.iter_content(chunk_size=512):
-            #         # tt=chunk.decode('utf-8')[6:].rstrip('\n)
-            #         try:
-            #
-            #             if chunk.decode('utf-8').endswith('data: [DONE]\n\n'):
-            #                 finish_reason = '[DONE]'
-            #                 sys.stdout.write('[DONE]')
-            #                 break
-            #
-            #             jstrs = chunk.decode('utf-8-sig').replace(':null', ':\"None\"')[5:]
-            #             this_chunk = json.loads(jstrs)
-            #             this_choice = this_chunk['choices'][0]['delta']
-            #             finish_reason = this_chunk['choices'][0]['finish_reason']
-            #
-            #             if 'content' in this_choice:
-            #                 if summary == '' and this_choice['content'] == '\n\n':
-            #                     pass
-            #                 elif this_choice['content'] == '\n\n':
-            #                     summary += '\n'
-            #                 else:
-            #                     summary += this_choice['content']
-            #                     # sys.stdout.write(this_choice['content'])
-            #                 full_history[-1]['summary'] = summary
-            #                 token_counter += 1
-            #         except Exception as e:
-            #             if len(summary) == 0:
-            #                 pass
-            #             else:
-            #                 full_history[-1]['exception'] = str(e)
-            #     # messages_history.append({"role": "assistant", "content": summary})
-            #     print('summary: ', len(summary), summary)
+            if len(partial_words) > 200:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                tasks =[asyncio.ensure_future(self.summarize_text(text_input=partial_words,timeout=60))]
+                loop.run_until_complete(asyncio.wait(tasks))
+                response= tasks[0].result()
+                summarization_text=response["content"].strip()
+                full_history[-1]['summary'] = summarization_text
+                full_history[-1]['summary_tokens'] =int(response["total_tokens"].strip())
+
+
             full_history[-1]['tokens']=token_counter
             chat = [(process_chat(full_history[i]), process_chat(full_history[i + 1])) for i in
                     range(1, len(full_history) - 1, 2) if full_history[i]['role'] != 'system']
@@ -344,6 +318,43 @@ class GptBaseApi:
         #
         # yield answer, full_history
 
+    async def summarize_text(self, text_input,timeout=60):
+        """post 串流形式的對話
+        :param text_input:
+        :return:
+        """
+        partial_words = ''
+        token_counter = 0
+        context_type=ContextType.explain
+        conversation = [
+            {
+                "role": "system",
+                "content": "你是萬能的文字助手，你擅長將任何文字在盡可能保持原意不變的狀況下摘錄重點。當使用者輸入長文本，你將會回傳保持原意不變的精簡版本內容"
+            },
+            {
+                "role": "user",
+                "content": text_input
+            }
+        ]
+
+        response=await openai_async.chat_complete(
+                api_key=os.getenv("OPENAI_API_KEY"),
+                timeout=timeout,
+                payload={
+                    "model": self.API_MODEL,
+                    "messages": conversation
+                },
+            )
+        try:
+            # 解析返回的JSON結果
+            summary = response.json()["choices"][0]["message"]
+            total_tokens=response.json()["usage"]["total_tokens"]
+            summary['total_tokens']=total_tokens
+            return summary
+        except Exception as e:
+            return await response.choices[0].message['content'].strip() + "\n" + str(e)
+
+
 
     def post_and_get_answer(self,message_context, parameters, full_history=None):
         """發問並獲取答案
@@ -369,8 +380,10 @@ class GptBaseApi:
         try:
             # 解析返回的JSON結果
             answer=response.choices[0].message['content'].strip()
+            total_tokens=response.json()["usage"]["total_tokens"]
+
             if full_history is not None:
-                full_history.append({"role": "assistant", "content": answer, "context_type": ContextType.prompt})
+                full_history.append({"role": "assistant", "content": answer, "context_type": ContextType.prompt,"total_tokens":total_tokens})
             return response.choices[0].message['content'].strip()
         except Exception as e:
             return response.choices[0].message['content'].strip() + "\n" + str(e)
