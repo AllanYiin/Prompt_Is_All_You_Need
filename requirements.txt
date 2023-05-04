@@ -8,3 +8,7 @@ numpy
 opencv-python
 pypdf>=3.7.1
 markdown2
+tiktoken
+openai-async
+asyncio
+nest-asyncio
