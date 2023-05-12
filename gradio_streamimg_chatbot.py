@@ -10,7 +10,7 @@ from utils.chatgpt_utils import *
 from utils.regex_utils import *
 import api.context_type as ContextType
 from api.base_api import *
-from utils.chatgpt_utils import process_context,process_chat
+from utils.tokens_utils import *
 from gradio_chatbot_patch import Chatbot as grChatbot
 from gradio_css import code_highlight_css
 # 設置您的OpenAI API金鑰
@@ -41,12 +41,7 @@ pre {
 
 
 
-baseChatGpt=GptBaseApi(model="gpt-3.5-turbo")
 
-role1ChatGpt=GptBaseApi(model="gpt-3.5-turbo")
-role2ChatGpt=GptBaseApi(model="gpt-3.5-turbo")
-role1ChatGpt.API_PARAMETERS['temperature'] = 0.5
-role2ChatGpt.API_PARAMETERS['temperature'] = 0.5
 
 pattern = regex.compile(r'\{(?:[^{}]|(?R))*\}')
 def index2context(idx:int):
@@ -71,7 +66,7 @@ def prompt_api(inputs, context_type, top_p, temperature, top_k, frequency_penalt
     baseChatGpt.API_PARAMETERS['top_p'] = top_p
     baseChatGpt.API_PARAMETERS['top_k'] = top_k
     baseChatGpt.API_PARAMETERS['frequency_penalty'] = frequency_penalty
-    streaming_chat = baseChatGpt.post_a_streaming_chat(inputs, _context_type, baseChatGpt.API_PARAMETERS,baseChatGpt.FULL_HISTORY)
+    streaming_chat = baseChatGpt.post_a_streaming_chat(inputs, _context_type, baseChatGpt.API_PARAMETERS,full_history)
     while True:
         try:
             chat, answer, full_history= next(streaming_chat)
@@ -179,6 +174,11 @@ if __name__ == '__main__':
     description = ""
 
     with gr.Blocks(css=css,theme=gr.themes.Soft(spacing_size="sm", radius_size="none",font=["Microsoft JhengHei UI", "Arial", "sans-serif"])) as demo:
+        baseChatGpt = GptBaseApi(model="gpt-3.5-turbo")
+        # role1ChatGpt = GptBaseApi(model="gpt-3.5-turbo")
+        # role2ChatGpt = GptBaseApi(model="gpt-3.5-turbo")
+        # role1ChatGpt.API_PARAMETERS['temperature'] = 0.5
+        # role2ChatGpt.API_PARAMETERS['temperature'] = 0.5
         gr.HTML(title)
         with gr.Tabs():
             with gr.TabItem("對話"):
@@ -198,7 +198,9 @@ if __name__ == '__main__':
                     with gr.Row():
                         b3 = gr.Button(value='🗑️')
                         b2 = gr.Button(value='⏸️')
-                    state = gr.State([{"role": "system", "content": '所有內容以繁體中文書寫'}])  # s
+                    state = gr.State([{"role": "system", "content": '所有內容以繁體中文書寫',"estimate_tokens": estimate_used_tokens('所有內容以繁體中文書寫', model_name=baseChatGpt.API_MODEL)}])  # s
+
+                    baseChatGpt.FULL_HISTORY=state
                 with gr.Accordion("超參數", open=False):
                         top_p = gr.Slider(minimum=-0, maximum=1.0, value=0.95, step=0.05, interactive=True,
                                           label="限制取樣範圍(Top-p)", )
@@ -388,4 +390,4 @@ if __name__ == '__main__':
         rewrite_button.click(rewrite_api, [rewrite_inputs,rewrite_dropdown], rewrite_output)
 
         gr.Markdown(description)
-        demo.queue(concurrency_count=3,api_open=True).launch(show_error=True, max_threads=200)
+        demo.queue(concurrency_count=3,api_open=True).launch(show_error=True, max_threads=200,share=True)
