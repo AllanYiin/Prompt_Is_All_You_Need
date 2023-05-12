@@ -4,7 +4,6 @@ import os
 import openai
 import openai_async
 
-
 import asyncio
 import nest_asyncio
 nest_asyncio.apply()
@@ -22,6 +21,7 @@ from base64 import b64decode
 import api.context_type as ContextType
 from utils.regex_utils import *
 from utils.chatgpt_utils import process_context,process_chat
+from utils.tokens_utils import num_tokens_from_history,estimate_used_tokens
 
 class GptBaseApi:
     def __init__(self, url="https://api.openai.com/v1/chat/completions",model="gpt-3.5-turbo",temperature=0.5,system_message='所有內容以繁體中文書寫'):
@@ -36,7 +36,8 @@ class GptBaseApi:
         }
         self.SYSTEM_MESSAGE=system_message
         self.API_PARAMETERS={'top_p':1, 'temperature':temperature, 'top_k':1,'presence_penalty':0, 'frequency_penalty':0,'max_tokens':2500}
-        self.FULL_HISTORY =[{"role": "system", "content": self.SYSTEM_MESSAGE}]
+        self.FULL_HISTORY =[{"role": "system", "content": self.SYSTEM_MESSAGE,"estimate_tokens": estimate_used_tokens(self.SYSTEM_MESSAGE,model_name=self.API_MODEL)}]
+
 
     def build_message(self,role, content):
         """
@@ -90,16 +91,20 @@ class GptBaseApi:
         """
         if context_type == ContextType.globals:
             full_history[0]["content"] = full_history[0]["content"] + '/n' + input_prompt
+            full_history[0]["estimate_tokens"]=estimate_used_tokens(full_history[0]["content"] + '/n' + input_prompt,model_name=self.API_MODEL)
 
         elif context_type == ContextType.override:
             full_history[0]["content"] = input_prompt
+            full_history[0]["estimate_tokens"] = estimate_used_tokens( input_promp,model_name=self.API_MODEL)
+
         elif input_prompt:
             # 調用openai.ChatCompletion.create來生成機器人的回答
+            estimate_tokens= estimate_used_tokens(input_prompt)
             message_context = self.process_context(input_prompt, context_type, full_history)
             partial_words = ''
             token_counter = 0
             payload = self.parameters2payload(self.API_MODEL,message_context,self.API_PARAMETERS)
-            full_history.append({"role": "user", "content": input_prompt, "context_type": context_type})
+            full_history.append({"role": "user", "content": input_prompt, "context_type": context_type,"estimate_tokens":estimate_tokens})
             request = requests.post(self.BASE_URL, headers=self.API_HEADERS, json=payload, stream=True)
 
             finish_reason = 'None'
@@ -201,10 +206,11 @@ class GptBaseApi:
                 response= tasks[0].result()
                 summarization_text=response["content"].strip()
                 full_history[-1]['summary'] = summarization_text
-                full_history[-1]['summary_tokens'] =int(response["total_tokens"].strip())
+                full_history[-1]['summary_tokens'] =response["total_tokens"]
 
 
             full_history[-1]['tokens']=token_counter
+            full_history[-1]["estimate_tokens"] = estimate_used_tokens(partial_words,model_name=self.API_MODEL)
             chat = [(process_chat(full_history[i]), process_chat(full_history[i + 1])) for i in
                     range(1, len(full_history) - 1, 2) if full_history[i]['role'] != 'system']
             answer = full_history[-1]['content']
@@ -329,7 +335,7 @@ class GptBaseApi:
         conversation = [
             {
                 "role": "system",
-                "content": "你是萬能的文字助手，你擅長將任何文字在盡可能保持原意不變的狀況下摘錄重點。當使用者輸入長文本，你將會回傳保持原意不變的精簡版本內容"
+                "content": "你是萬能的文字助手，你擅長將任何文字在保持原意不變，但必須保留[人名、公司機構名稱、事物名稱、地點、時間、數值]、陳述事實與知識點前提下，作最精簡的摘要。當使用者輸入長文本，你將會回傳保持原意不變的精簡版本內容"
             },
             {
                 "role": "user",
@@ -342,13 +348,14 @@ class GptBaseApi:
                 timeout=timeout,
                 payload={
                     "model": self.API_MODEL,
-                    "messages": conversation
+                    "messages": conversation,
+                    "temperature" :0.01
                 },
             )
         try:
             # 解析返回的JSON結果
             summary = response.json()["choices"][0]["message"]
-            total_tokens=response.json()["usage"]["total_tokens"]
+            total_tokens=response.json()["usage"]['completion_tokens']
             summary['total_tokens']=total_tokens
             return summary
         except Exception as e:
@@ -380,7 +387,9 @@ class GptBaseApi:
         try:
             # 解析返回的JSON結果
             answer=response.choices[0].message['content'].strip()
-            total_tokens=response.json()["usage"]["total_tokens"]
+            total_tokens=response["usage"]['completion_tokens']
+
+
 
             if full_history is not None:
                 full_history.append({"role": "assistant", "content": answer, "context_type": ContextType.prompt,"total_tokens":total_tokens})
