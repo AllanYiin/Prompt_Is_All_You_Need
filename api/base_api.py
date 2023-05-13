@@ -23,6 +23,8 @@ from utils.regex_utils import *
 from utils.chatgpt_utils import process_context,process_chat
 from utils.tokens_utils import num_tokens_from_history,estimate_used_tokens
 
+
+
 class GptBaseApi:
     def __init__(self, url="https://api.openai.com/v1/chat/completions",model="gpt-3.5-turbo",temperature=0.5,system_message='所有內容以繁體中文書寫'):
         self.BASE_URL = url

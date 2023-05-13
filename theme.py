@@ -1,5 +1,208 @@
-code_highlight_css = (
+import gradio as gr
+#from toolbox import get_conf
+
+CODE_HIGHLIGHT=True
+ADD_WAIFU=True# = get_conf('CODE_HIGHLIGHT', 'ADD_WAIFU')
+
+
+# gradio可用颜色列表
+# gr.themes.colors.slate (石板色)
+# gr.themes.colors.gray (灰色)
+# gr.themes.colors.zinc (锌色)
+# gr.themes.colors.neutral (中性色)
+# gr.themes.colors.stone (石头色)
+# gr.themes.colors.red (红色)
+# gr.themes.colors.orange (橙色)
+# gr.themes.colors.amber (琥珀色)
+# gr.themes.colors.yellow (黄色)
+# gr.themes.colors.lime (酸橙色)
+# gr.themes.colors.green (绿色)
+# gr.themes.colors.emerald (祖母绿)
+# gr.themes.colors.teal (青蓝色)
+# gr.themes.colors.cyan (青色)
+# gr.themes.colors.sky (天蓝色)
+# gr.themes.colors.blue (蓝色)
+# gr.themes.colors.indigo (靛蓝色)
+# gr.themes.colors.violet (紫罗兰色)
+# gr.themes.colors.purple (紫色)
+# gr.themes.colors.fuchsia (洋红色)
+# gr.themes.colors.pink (粉红色)
+# gr.themes.colors.rose (玫瑰色)
+
+
+def adjust_theme():
+    try:
+        color_er = gr.themes.colors.fuchsia
+        set_theme = gr.themes.Default(
+            primary_hue=gr.themes.colors.orange,
+            neutral_hue=gr.themes.colors.gray,
+            font=["sans-serif", "Microsoft YaHei", "ui-sans-serif", "system-ui",
+                  "sans-serif", gr.themes.utils.fonts.GoogleFont("Source Sans Pro")],
+            font_mono=["ui-monospace", "Consolas", "monospace", gr.themes.utils.fonts.GoogleFont("IBM Plex Mono")],
+
+        )
+
+        set_theme.set(
+            # Colors
+            input_background_fill_dark="*neutral_800",
+            # Transition
+            button_transition="none",
+            # Shadows
+            button_shadow="*shadow_drop",
+            button_shadow_hover="*shadow_drop_lg",
+            button_shadow_active="*shadow_inset",
+            input_shadow="0 0 0 *shadow_spread transparent, *shadow_inset",
+            input_shadow_focus="0 0 0 *shadow_spread *secondary_50, *shadow_inset",
+            input_shadow_focus_dark="0 0 0 *shadow_spread *neutral_700, *shadow_inset",
+            checkbox_label_shadow="*shadow_drop",
+            block_shadow="*shadow_drop",
+            form_gap_width="1px",
+            # Button borders
+            input_border_width="1px",
+            input_background_fill="white",
+            # Gradients
+            stat_background_fill="linear-gradient(to right, *primary_400, *primary_200)",
+            stat_background_fill_dark="linear-gradient(to right, *primary_400, *primary_600)",
+            error_background_fill=f"linear-gradient(to right, {color_er.c100}, *background_fill_secondary)",
+            error_background_fill_dark="*background_fill_primary",
+            checkbox_label_background_fill="linear-gradient(to top, *neutral_50, white)",
+            checkbox_label_background_fill_dark="linear-gradient(to top, *neutral_900, *neutral_800)",
+            checkbox_label_background_fill_hover="linear-gradient(to top, *neutral_100, white)",
+            checkbox_label_background_fill_hover_dark="linear-gradient(to top, *neutral_900, *neutral_800)",
+            button_primary_background_fill="linear-gradient(to bottom right, *primary_100, *primary_300)",
+            button_primary_background_fill_dark="linear-gradient(to bottom right, *primary_500, *primary_600)",
+            button_primary_background_fill_hover="linear-gradient(to bottom right, *primary_100, *primary_200)",
+            button_primary_background_fill_hover_dark="linear-gradient(to bottom right, *primary_500, *primary_500)",
+            button_primary_border_color_dark="*primary_500",
+            button_secondary_background_fill="linear-gradient(to bottom right, *neutral_100, *neutral_200)",
+            button_secondary_background_fill_dark="linear-gradient(to bottom right, *neutral_600, *neutral_700)",
+            button_secondary_background_fill_hover="linear-gradient(to bottom right, *neutral_100, *neutral_100)",
+            button_secondary_background_fill_hover_dark="linear-gradient(to bottom right, *neutral_600, *neutral_600)",
+            button_cancel_background_fill=f"linear-gradient(to bottom right, {color_er.c100}, {color_er.c200})",
+            button_cancel_background_fill_dark=f"linear-gradient(to bottom right, {color_er.c600}, {color_er.c700})",
+            button_cancel_background_fill_hover=f"linear-gradient(to bottom right, {color_er.c100}, {color_er.c100})",
+            button_cancel_background_fill_hover_dark=f"linear-gradient(to bottom right, {color_er.c600}, {color_er.c600})",
+            button_cancel_border_color=color_er.c200,
+            button_cancel_border_color_dark=color_er.c600,
+            button_cancel_text_color=color_er.c600,
+            button_cancel_text_color_dark="white",
+        )
+
+        if ADD_WAIFU:
+            js = """
+                <script src="file=docs/waifu_plugin/jquery.min.js"></script>
+                <script src="file=docs/waifu_plugin/jquery-ui.min.js"></script>
+                <script src="file=docs/waifu_plugin/autoload.js"></script>
+            """
+            gradio_original_template_fn = gr.routes.templates.TemplateResponse
+
+            def gradio_new_template_fn(*args, **kwargs):
+                res = gradio_original_template_fn(*args, **kwargs)
+                res.body = res.body.replace(b'</html>', f'{js}</html>'.encode("utf8"))
+                res.init_headers()
+                return res
+
+            gr.routes.templates.TemplateResponse = gradio_new_template_fn  # override gradio template
+    except:
+        set_theme = None
+        print('gradio版本较旧, 不能自定义字体和颜色')
+    return set_theme
+
+
+advanced_css = """
+/* 设置表格的外边距为1em，内部单元格之间边框合并，空单元格显示. */
+.markdown-body table {
+    margin: 1em 0;
+    border-collapse: collapse;
+    empty-cells: show;
+}
+
+/* 设置表格单元格的内边距为5px，边框粗细为1.2px，颜色为--border-color-primary. */
+.markdown-body th, .markdown-body td {
+    border: 1.2px solid var(--border-color-primary);
+    padding: 5px;
+}
+
+/* 设置表头背景颜色为rgba(175,184,193,0.2)，透明度为0.2. */
+.markdown-body thead {
+    background-color: rgba(175,184,193,0.2);
+}
+
+/* 设置表头单元格的内边距为0.5em和0.2em. */
+.markdown-body thead th {
+    padding: .5em .2em;
+}
+
+/* 去掉列表前缀的默认间距，使其与文本线对齐. */
+.markdown-body ol, .markdown-body ul {
+    padding-inline-start: 2em !important;
+}
+
+/* 设定聊天气泡的样式，包括圆角、最大宽度和阴影等. */
+[class *= "message"] {
+    border-radius: var(--radius-xl) !important;
+    /* padding: var(--spacing-xl) !important; */
+    /* font-size: var(--text-md) !important; */
+    /* line-height: var(--line-md) !important; */
+    /* min-height: calc(var(--text-md)*var(--line-md) + 2*var(--spacing-xl)); */
+    /* min-width: calc(var(--text-md)*var(--line-md) + 2*var(--spacing-xl)); */
+}
+[data-testid = "bot"] {
+    max-width: 95%;
+    /* width: auto !important; */
+    border-bottom-left-radius: 0 !important;
+}
+[data-testid = "user"] {
+    max-width: 100%;
+    /* width: auto !important; */
+    border-bottom-right-radius: 0 !important;
+}
+
+/* 行内代码的背景设为淡灰色，设定圆角和间距. */
+.markdown-body code {
+    display: inline;
+    white-space: break-spaces;
+    border-radius: 6px;
+    margin: 0 2px 0 2px;
+    padding: .2em .4em .1em .4em;
+    background-color: rgba(13, 17, 23, 0.95);
+    color: #c9d1d9;
+}
+
+.dark .markdown-body code {
+    display: inline;
+    white-space: break-spaces;
+    border-radius: 6px;
+    margin: 0 2px 0 2px;
+    padding: .2em .4em .1em .4em;
+    background-color: rgba(175,184,193,0.2);
+}
+
+/* 设定代码块的样式，包括背景颜色、内、外边距、圆角。 */
+.markdown-body pre code {
+    display: block;
+    overflow: auto;
+    white-space: pre;
+    background-color: rgba(13, 17, 23, 0.95);
+    border-radius: 10px;
+    padding: 1em;
+    margin: 1em 2em 1em 0.5em;
+}
+
+.dark .markdown-body pre code {
+    display: block;
+    overflow: auto;
+    white-space: pre;
+    background-color: rgba(175,184,193,0.2);
+    border-radius: 10px;
+    padding: 1em;
+    margin: 1em 2em 1em 0.5em;
+}
+
 """
+
+if CODE_HIGHLIGHT:
+    advanced_css += """
 
 .codehilite .hll { background-color: #6e7681 }
 .codehilite .c { color: #8b949e; font-style: italic } /* Comment */
@@ -158,5 +361,5 @@ code_highlight_css = (
 .dark .codehilite .vi { color: #89DDFF } /* Name.Variable.Instance */
 .dark .codehilite .vm { color: #82AAFF } /* Name.Variable.Magic */
 .dark .codehilite .il { color: #F78C6C } /* Literal.Number.Integer.Long */
-""")
-#.highlight  { background: #f8f8f8; }
+
+"""

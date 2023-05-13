@@ -12,7 +12,11 @@ import api.context_type as ContextType
 from api.base_api import *
 from utils.tokens_utils import *
 from gradio_chatbot_patch import Chatbot as grChatbot
-from gradio_css import code_highlight_css
+#from gradio_css import code_highlight_css
+from theme import adjust_theme, advanced_css
+
+os.environ['no_proxy'] = '*'
+
 # 設置您的OpenAI API金鑰
 #請將您的金鑰值寫入至環境變數"OPENAI_API_KEY"中
 #os.environ['OPENAI_API_KEY']=#'你的金鑰值'
@@ -20,27 +24,6 @@ if "OPENAI_API_KEY" not in os.environ:
     print("OPENAI_API_KEY  is not exists!")
 openai.api_key = os.getenv("OPENAI_API_KEY")
 URL = "https://api.openai.com/v1/chat/completions"
-
-
-
-
-css = code_highlight_css + """
-pre {
-    white-space: pre-wrap;       /* Since CSS 2.1 */
-    white-space: -moz-pre-wrap;  /* Mozilla, since 1999 */
-    white-space: -pre-wrap;      /* Opera 4-6 */
-    white-space: -o-pre-wrap;    /* Opera 7 */
-    word-wrap: break-word;       /* Internet Explorer 5.5+ */
-}
-"""
-
-#
-# """col_container {width: 80%; margin-left: auto; margin-right: auto;}
-#                     #chatbot {height: 50%; overflow: auto;}
-#                     #history_viewer {height: 50%; overflow: auto;}"""
-
-
-
 
 
 pattern = regex.compile(r'\{(?:[^{}]|(?R))*\}')
@@ -169,16 +152,12 @@ def pause_message():
 
 
 if __name__ == '__main__':
-
+    PORT=7860
     title = """<h1 align="center">🔥🤖Prompt is All You Need! 🚀</h1>"""
     description = ""
 
-    with gr.Blocks(css=css,theme=gr.themes.Soft(spacing_size="sm", radius_size="none",font=["Microsoft JhengHei UI", "Arial", "sans-serif"])) as demo:
+    with gr.Blocks(title="Prompt is what you need!",css=advanced_css, analytics_enabled=False,theme=adjust_theme()) as demo:
         baseChatGpt = GptBaseApi(model="gpt-3.5-turbo")
-        # role1ChatGpt = GptBaseApi(model="gpt-3.5-turbo")
-        # role2ChatGpt = GptBaseApi(model="gpt-3.5-turbo")
-        # role1ChatGpt.API_PARAMETERS['temperature'] = 0.5
-        # role2ChatGpt.API_PARAMETERS['temperature'] = 0.5
         gr.HTML(title)
         with gr.Tabs():
             with gr.TabItem("對話"):
@@ -390,4 +369,25 @@ if __name__ == '__main__':
         rewrite_button.click(rewrite_api, [rewrite_inputs,rewrite_dropdown], rewrite_output)
 
         gr.Markdown(description)
-        demo.queue(concurrency_count=3,api_open=True).launch(show_error=True, max_threads=200,share=True)
+
+
+        # gradio的inbrowser触发不太稳定，回滚代码到原始的浏览器打开函数
+        def auto_opentab_delay():
+            import threading, webbrowser, time
+            print(f"若是瀏覽器未自動開啟，請直接點選以下連結：")
+            print(f"\t（暗黑模式）: http://localhost:{PORT}/?__theme=dark")
+            print(f"\t（光明模式）: http://localhost:{PORT}")
+
+            def open():
+                time.sleep(2)  # 打开浏览器
+                DARK_MODE = True
+                if DARK_MODE:
+                    webbrowser.open_new_tab(f"http://localhost:{PORT}/?__theme=dark")
+                else:
+                    webbrowser.open_new_tab(f"http://localhost:{PORT}")
+
+            threading.Thread(target=open, name="open-browser", daemon=True).start()
+
+
+        auto_opentab_delay()
+        demo.queue(concurrency_count=3,api_open=False).launch(show_error=True, max_threads=200,share=True)
