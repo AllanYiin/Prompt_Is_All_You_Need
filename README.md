@@ -5,15 +5,17 @@
 ![prompt](images/ui_1.png)
 
 ### 目前這個專案中已經實現了: ###
+* 暗黑模式 (new)
 * 將與ChatGPT交互模式抽象化(api/base_api/GptBaseApi)
 * streaming 對話
 * 自動繼續(當因為字數因素中斷，會自動背景重發繼續，然後將回傳結果接在前面中斷的位置，使用者將完全沒有中斷的感覺，這是我開始這專案時最想完成的功能)
-* 歷史對話紀錄自動摘要(以縮減tokens數)
+* 歷史對話紀錄長文自動摘要(以縮減tokens數)
 * 超參數調整
 * ChatGPT inside的傳統自然語言處理任務
 * ChatGPT 與Dall.E2協作
 * 語氣改寫
-
+* ~~coming soon 會議錄音自動整理!!!!
+![prompt](images/dark1.png)
 ![prompt](images/ui_2.png)
 ![prompt](images/dalle2_1.png)
 ![prompt](images/rewrite1.png)
