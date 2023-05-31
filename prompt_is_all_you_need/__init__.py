@@ -16,7 +16,7 @@ PACKAGE_ROOT = os.path.dirname(__file__)
 PROJECT_ROOT = os.path.dirname(PACKAGE_ROOT)
 
 __version__ = '0.0.1'
-stderr.write('Prompt_Is_All_You_Need {0}\n'.format(__version__))
+stderr.write('prompt_is_all_you_need {0}\n'.format(__version__))
 
 from prompt_is_all_you_need.api import *
 from prompt_is_all_you_need.utils import *
