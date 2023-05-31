@@ -18,8 +18,8 @@ PROJECT_ROOT = os.path.dirname(PACKAGE_ROOT)
 __version__ = '0.0.1'
 stderr.write('Prompt_Is_All_You_Need {0}\n'.format(__version__))
 
-from Prompt_Is_All_You_Need.api import *
-from Prompt_Is_All_You_Need.utils import *
+from prompt_is_all_you_need.api import *
+from prompt_is_all_you_need.utils import *
 import threading
 import random
 import glob
