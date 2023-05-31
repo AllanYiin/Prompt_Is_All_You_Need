@@ -18,7 +18,7 @@ import numpy as np
 import cv2
 import PIL.Image as pil_image
 from base64 import b64decode
-import api.context_type as ContextType
+import prompt_is_all_you_need.api.context_type as ContextType
 from utils.regex_utils import *
 from utils.chatgpt_utils import process_context, process_chat
 from utils.tokens_utils import num_tokens_from_history, estimate_used_tokens

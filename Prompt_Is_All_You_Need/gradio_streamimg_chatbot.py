@@ -6,14 +6,14 @@ import gradio as gr
 import openai
 import requests
 from datetime import datetime
-from utils.chatgpt_utils import *
-from utils.regex_utils import *
-import api.context_type as ContextType
-from api.base_api import *
-from utils.tokens_utils import *
+from prompt_is_all_you_need.utils.chatgpt_utils import *
+from prompt_is_all_you_need.utils.regex_utils import *
+import prompt_is_all_you_need.api.context_type as ContextType
+from prompt_is_all_you_need.api.base_api import *
+from prompt_is_all_you_need.utils.tokens_utils import *
 from gradio_chatbot_patch import Chatbot as grChatbot
 #from gradio_css import code_highlight_css
-from theme import adjust_theme, advanced_css
+from prompt_is_all_you_need.theme import adjust_theme, advanced_css
 
 os.environ['no_proxy'] = '*'
 
