@@ -19,9 +19,9 @@ import cv2
 import PIL.Image as pil_image
 from base64 import b64decode
 import prompt4all.api.context_type as ContextType
-from prompt4all.utils.regex_utils import *
-from prompt4all.utils.chatgpt_utils import process_context, process_chat
-from prompt4all.utils.tokens_utils import num_tokens_from_history, estimate_used_tokens
+from utils.regex_utils import *
+from utils.chatgpt_utils import process_context, process_chat
+from utils.tokens_utils import num_tokens_from_history, estimate_used_tokens
 #from tiktoken import Tokenizer, TokenizerWrapper
 from typing import List, Dict, TypedDict
 
@@ -56,6 +56,11 @@ model_info = {
     },
     "azure gpt-3.5-turbo": {
         "endpoint": 'https://prd-gpt-scus.openai.azure.com',
+        "max_token": 4096
+    },
+    "azure 2023-03-15-preview": {
+        "api_version":"2023-03-15-preview",
+        "endpoint": 'https://ltc-to-openai.openai.azure.com/',
         "max_token": 4096
     },
 
@@ -204,24 +209,24 @@ class GptBaseApi:
         context_tokens=sum(
                     [estimate_used_tokens(message['content']) + estimate_used_tokens(message['role']) + 4 for message in
                      message_context]) + 2
-        with open(
-                os.path.join('context_log', "{0}.json".format(int(datetime.now().timestamp()))),
-                'w') as f:
-            f.write(json.dumps({
-                "message_context": message_context,
-                "tokens": context_tokens
-            }, ensure_ascii=False, indent=3))
+        # with open(
+        #         os.path.join('context_log', "{0}.json".format(int(datetime.now().timestamp()))),
+        #         'w') as f:
+        #     f.write(json.dumps({
+        #         "message_context": message_context,
+        #         "tokens": context_tokens
+        #     }, ensure_ascii=False, indent=3))
 
         return message_context,context_tokens
 
-    def parameters2payload(self, model, message_with_context, parameters):
+    def parameters2payload(self, model, message_with_context, parameters,stream=True):
         payload = {
             "model": model,
             "messages": message_with_context,
             "temperature": parameters.get('temperature'),
             "top_p": parameters.get('top_p'),
             "n": parameters.get('top_k'),
-            "stream": True,
+            "stream": stream,
             "presence_penalty": parameters.get('presence_penalty'),
             "frequency_penalty": parameters.get('frequency_penalty')
         }
@@ -261,78 +266,69 @@ class GptBaseApi:
             payload = self.parameters2payload(self.API_MODEL, message_context, self.API_PARAMETERS)
             full_history.append({"role": "user", "content": input_prompt, "context_type": context_type,
                                  "estimate_tokens": estimate_tokens})
-            request = requests.post(self.BASE_URL, headers=self.API_HEADERS, json=payload, stream=True)
+            response = requests.post(self.BASE_URL, headers=self.API_HEADERS, json=payload, stream=True)
 
             finish_reason = 'None'
-            # client = sseclient.SSEClient(request)
-            for chunk in request.iter_content(chunk_size=512, decode_unicode=False):
+            try:
+                for chunk in response.iter_lines():
+                    try:
+                        chunk_decoded = chunk.decode()
+                        if ( 'data: [DONE]' in chunk_decoded):  # or (len(json.loads(chunk_decoded[6:])['choices'][0]["delta"]) == 0):
+                            finish_reason = '[DONE]'
+                            break
+                        this_choice = json.loads(chunk_decoded[6:])['choices'][0]
+                        finish_reason = this_choice['finish_reason']
 
-                try:
-                    if chunk.decode('utf-8-sig').endswith('data: [DONE]\n\n'):
-                        finish_reason = '[DONE]'
-                        break
+                        if 'content' in this_choice['delta']:
+                            partial_words += this_choice['delta']['content']
 
-                    jstrs = chunk.decode('utf-8-sig').replace(':null', ':\"None\"')
-                    this_choice = eval(choice_pattern.findall(jstrs)[-1])
-                    finish_reason = this_choice['finish_reason']
+                            if token_counter == 0:
+                                full_history.append(
+                                    {"role": "assistant", "content": partial_words, "context_type": context_type})
+                            else:
+                                full_history[-1]['content'] = partial_words
 
-                    if 'content' in this_choice['delta']:
-                        # if partial_words == '' and this_choice['delta']['content'] == '\n\n':
-                        #     pass
-                        # elif this_choice['delta']['content'] == '\n\n':
-                        #     partial_words += '\n  '
-                        # else:
-                        partial_words += this_choice['delta']['content']
+                            token_counter += 1
 
-                        if token_counter == 0:
-                            full_history.append(
-                                {"role": "assistant", "content": partial_words, "context_type": context_type})
+                    except Exception as e:
+                        finish_reason = '[EXCEPTION]'
+                        if len(partial_words) == 0:
+                            pass
                         else:
-                            full_history[-1]['content'] = partial_words
+                            full_history[-1]['exception'] = str(e)
 
-                        token_counter += 1
+                    chat = [(process_chat(full_history[i]), process_chat(full_history[i + 1])) for i in
+                            range(1, len(full_history) - 1, 2) if full_history[i]['role'] != 'system']
+                    answer = full_history[-1]['content']
 
-                except Exception as e:
-                    if len(partial_words) == 0:
-                        pass
-                    else:
-                        full_history[-1]['exception'] = str(e)
-
-                chat = [(process_chat(full_history[i]), process_chat(full_history[i + 1])) for i in
-                        range(1, len(full_history) - 1, 2) if full_history[i]['role'] != 'system']
-                answer = full_history[-1]['content']
-
-                yield chat, answer, full_history
-
+                    yield chat, answer, full_history
+            except Exception as e:
+                finish_reason = '[EXCEPTION]'
+                print(e)
             # 檢查finish_reason是否為length
-            while finish_reason != '[DONE]':
+            while finish_reason != '[DONE]' and finish_reason != '[EXCEPTION]':
                 # 自動以user角色發出「繼續寫下去」的PROMPT
                 prompt = "繼續"
                 # 調用openai.ChatCompletion.create來生成機器人的回答
                 message_context,context_tokens = self.process_context(prompt, context_type, full_history)
                 payload = self.parameters2payload(self.API_MODEL, message_context, self.API_PARAMETERS)
-                request = requests.post(self.BASE_URL, headers=self.API_HEADERS, json=payload, stream=True)
+                response = requests.post(self.BASE_URL, headers=self.API_HEADERS, json=payload, stream=True)
                 full_history[-1]['auto_continue'] = 1 if 'auto_continue' not in full_history[-1] else full_history[-1][
                                                                                                           'auto_continue'] + 1
                 finish_reason = 'None'
-                # client = sseclient.SSEClient(request)
-                for chunk in request.iter_content(chunk_size=512):
 
+                for chunk in response.iter_lines():
                     try:
-
-                        jstrs = chunk.decode('utf-8-sig').replace(':null', ':\"None\"')
-                        this_choice = eval(choice_pattern.findall(jstrs)[-1])
-                        finish_reason = this_choice['finish_reason']
-                        if chunk.decode('utf-8').endswith('data: [DONE]\n\n'):
+                        chunk_decoded = chunk.decode()
+                        if ('data: [DONE]' in chunk_decoded):  # or (len(json.loads(chunk_decoded[6:])['choices'][0]["delta"]) == 0):
                             finish_reason = '[DONE]'
                             break
+                        this_choice = json.loads(chunk_decoded[6:])['choices'][0]
+                        finish_reason = this_choice['finish_reason']
+
                         if 'content' in this_choice['delta']:
-                            # if partial_words == '' and this_choice['delta']['content'] == '\n\n':
-                            #     pass
-                            # elif this_choice['delta']['content'] == '\n\n':
-                            #     partial_words += '\n'
-                            # else:
                             partial_words += this_choice['delta']['content']
+
                             if token_counter == 0:
                                 full_history.append(
                                     {"role": "assistant", "content": partial_words, "context_type": context_type})
@@ -340,6 +336,7 @@ class GptBaseApi:
                                 full_history[-1]['content'] = partial_words
                             token_counter += 1
                     except Exception as e:
+                        finish_reason = '[EXCEPTION]'
                         if len(partial_words) == 0:
                             pass
                         else:
@@ -399,26 +396,20 @@ class GptBaseApi:
                 full_history = message_context
             else:
                 full_history.append(message_context[-1])
-            request = requests.post(self.BASE_URL, headers=self.API_HEADERS, json=payload, stream=True)
+            response = requests.post(self.BASE_URL, headers=self.API_HEADERS, json=payload, stream=True)
 
             finish_reason = 'None'
 
-            for chunk in request.iter_content(chunk_size=512, decode_unicode=False):
+            for chunk in response.iter_lines():
                 try:
-                    if chunk.decode('utf-8-sig').endswith('data: [DONE]\n\n'):
+                    chunk_decoded = chunk.decode()
+                    if 'data: [DONE]' in chunk_decoded:  # or (len(json.loads(chunk_decoded[6:])['choices'][0]["delta"]) == 0):
                         finish_reason = '[DONE]'
                         break
-
-                    jstrs = chunk.decode('utf-8-sig').replace(':null', ':\"None\"')
-                    this_choice = eval(choice_pattern.findall(jstrs)[-1])
+                    this_choice = json.loads(chunk_decoded[6:])['choices'][0]
                     finish_reason = this_choice['finish_reason']
 
                     if 'content' in this_choice['delta']:
-                        # if partial_words == '' and this_choice['delta']['content'] == '\n\n':
-                        #     pass
-                        # elif this_choice['delta']['content'] == '\n\n':
-                        #     partial_words += '\n  '
-                        # else:
                         partial_words += this_choice['delta']['content']
 
                         if token_counter == 0:
@@ -426,10 +417,10 @@ class GptBaseApi:
                                 {"role": "assistant", "content": partial_words, "context_type": context_type})
                         else:
                             full_history[-1]['content'] = partial_words
-
                         token_counter += 1
 
                 except Exception as e:
+                    finish_reason = '[EXCEPTION]'
                     if len(partial_words) == 0:
                         pass
                     else:
@@ -440,32 +431,27 @@ class GptBaseApi:
                 yield answer, full_history
 
             # 檢查finish_reason是否為length
-            while finish_reason != '[DONE]':
+            while finish_reason != '[DONE]' and finish_reason != '[EXCEPTION]':
                 # 自動以user角色發出「繼續寫下去」的PROMPT
                 prompt = "繼續"
                 # 調用openai.ChatCompletion.create來生成機器人的回答
                 payload = self.parameters2payload(self.API_MODEL, message_context, self.API_PARAMETERS)
-                request = requests.post(self.BASE_URL, headers=self.API_HEADERS, json=payload, stream=True)
+                response = requests.post(self.BASE_URL, headers=self.API_HEADERS, json=payload, stream=True)
 
                 finish_reason = 'None'
-                # client = sseclient.SSEClient(request)
-                for chunk in request.iter_content(chunk_size=512):
+                for chunk in response.iter_lines():
 
                     try:
 
-                        jstrs = chunk.decode('utf-8-sig').replace(':null', ':\"None\"')
-                        this_choice = eval(choice_pattern.findall(jstrs)[-1])
-                        finish_reason = this_choice['finish_reason']
-                        if chunk.decode('utf-8').endswith('data: [DONE]\n\n'):
+                        chunk_decoded = chunk.decode()
+                        if ( 'data: [DONE]' in chunk_decoded):  # or (len(json.loads(chunk_decoded[6:])['choices'][0]["delta"]) == 0):
                             finish_reason = '[DONE]'
                             break
+                        this_choice = json.loads(chunk_decoded[6:])['choices'][0]
+                        finish_reason = this_choice['finish_reason']
                         if 'content' in this_choice['delta']:
-                            # if partial_words == '' and this_choice['delta']['content'] == '\n\n':
-                            #     pass
-                            # elif this_choice['delta']['content'] == '\n\n':
-                            #     partial_words += '\n'
-                            # else:
                             partial_words += this_choice['delta']['content']
+
                             if token_counter == 0:
                                 full_history.append(
                                     {"role": "assistant", "content": partial_words, "context_type": context_type})
@@ -473,6 +459,7 @@ class GptBaseApi:
                                 full_history[-1]['content'] = partial_words
                             token_counter += 1
                     except Exception as e:
+                        finish_reason = '[EXCEPTION]'
                         print(e)
                         if len(partial_words) == 0:
                             pass
@@ -493,7 +480,7 @@ class GptBaseApi:
 
 
 
-    async def summarize_text(self, text_input,timeout=60):
+    async def summarize_text(self, text_input,timeout=120):
         """post 串流形式的對話
         :param text_input:
         :param timeout:
@@ -545,7 +532,9 @@ class GptBaseApi:
         token_counter = 0
         finish_reason = 'None'
         if full_history is not None:
-            full_history.append({"role": "user", "content": input_prompt, "context_type": ContextType.prompt})
+            last_message=copy.deepcopy(message_context[-1])
+            last_message["context_type"]=ContextType.prompt
+            full_history.append(last_message)
         estimate_tokens = sum(
             [estimate_used_tokens(message['content']) + estimate_used_tokens(message['role']) + 4 for message in
              message_context]) + 2
