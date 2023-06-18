@@ -15,7 +15,7 @@ if sys.getdefaultencoding() != defaultencoding:
 PACKAGE_ROOT = os.path.dirname(__file__)
 PROJECT_ROOT = os.path.dirname(PACKAGE_ROOT)
 
-__version__ = '0.0.1'
+__version__ = '0.0.2'
 stderr.write('prompt4all {0}\n'.format(__version__))
 
 from prompt4all import api
