@@ -18,7 +18,7 @@ from utils.regex_utils import *
 import api.context_type as ContextType
 from api.base_api import *
 from utils.tokens_utils import *
-from gradio_chatbot_patch import Chatbot as grChatbot
+#from gradio_chatbot_patch import Chatbot as grChatbot
 # from gradio_css import code_highlight_css
 from theme import adjust_theme, advanced_css
 
@@ -167,7 +167,7 @@ async def summarize_text(text_input, system_prompt):
         }
     ]
     payload = baseChatGpt.parameters2payload(baseChatGpt.API_MODEL, conversation, baseChatGpt.API_PARAMETERS,stream=False)
-    #response = requests.post()
+
     response =await asyncio.to_thread(
         requests.post,
         baseChatGpt.BASE_URL, headers=baseChatGpt.API_HEADERS, json=payload,stream=False
@@ -177,7 +177,7 @@ async def summarize_text(text_input, system_prompt):
 
     try:
         # 解析返回的JSON結果
-        this_choice = json.loads(choice_pattern.findall(response.content.decode())[0])
+        this_choice = json.loads(response.content.decode())['choices'][0]
         print(this_choice)
         summary =this_choice["message"]
         total_tokens = response.json()["usage"]['completion_tokens']
@@ -334,37 +334,35 @@ if __name__ == '__main__':
 
         baseChatGpt.FULL_HISTORY = state
         gr.HTML(title)
+
         with gr.Tabs():
             with gr.TabItem("對話"):
-                with gr.Column(elem_id="col_container"):
-                    chatbot = grChatbot(elem_id='chatbot').style(height=550)  # c
-                    with gr.Row():
-                        with gr.Column(scale=3):
-                            inputs = gr.Textbox(placeholder="你與語言模型Bert有何不同?", label="輸入文字後按enter")  # t
-                        with gr.Column(scale=1):
+                with gr.Row():
+                    with gr.Column(scale=3.5,elem_id="col_container"):
+                        chatbot = gr.Chatbot(elem_id='chatbot',container=True,scale=1,height=550)
+                    with gr.Column(scale=1):
+                        with gr.Row():
+                            inputs = gr.Textbox(placeholder="你與語言模型Bert有何不同?", label="輸入文字後按enter",lines=10,max_lines=2000)  # t
                             context_type = gr.Dropdown(
                                 ["[@PROMPT] 一般指令", "[@GLOBAL] 全局指令", "[@SKIP] 跳脫上文", "[@SANDBOX] 沙箱隔絕",
                                  "[@EXPLAIN] 解釋上文", "[@OVERRIDE] 覆寫全局"],
                                 value="[@PROMPT] 一般指令", type='index', label="context處理", elem_id='context_type',
                                 interactive=True)
-                    with gr.Row():
-                        b1 = gr.Button(value='送出')
                         with gr.Row():
-                            b3 = gr.Button(value='🗑️')
-                            b2 = gr.Button(value='⏸️')
-
-
-
-                with gr.Accordion("超參數", open=False):
-                    top_p = gr.Slider(minimum=-0, maximum=1.0, value=1, step=0.05, interactive=True,
-                                      label="限制取樣範圍(Top-p)", )
-                    temperature = gr.Slider(minimum=-0, maximum=2.0, value=0.9, step=0.1, interactive=True,
-                                            label="溫度 (Temperature)", )
-                    top_k = gr.Slider(minimum=1, maximum=50, value=1, step=1, interactive=True,
-                                      label="候選結果個數(Top-k)", )
-                    frequency_penalty = gr.Slider(minimum=-2, maximum=2, value=0, step=0.01, interactive=True,
-                                                  label="重複性處罰(Frequency Penalty)",
-                                                  info='值域為-2~+2，數值越大，對於重複用字會給予懲罰，數值越負，則鼓勵重複用字')
+                            b1 = gr.Button(value='送出')
+                            with gr.Row():
+                                b3 = gr.Button(value='🧹')
+                                b2 = gr.Button(value='⏹️')
+                        with gr.Accordion("超參數", open=False):
+                            top_p = gr.Slider(minimum=-0, maximum=1.0, value=1, step=0.05, interactive=True,
+                                              label="限制取樣範圍(Top-p)", )
+                            temperature = gr.Slider(minimum=-0, maximum=2.0, value=0.9, step=0.1, interactive=True,
+                                                    label="溫度 (Temperature)", )
+                            top_k = gr.Slider(minimum=1, maximum=50, value=1, step=1, interactive=True,
+                                              label="候選結果個數(Top-k)", )
+                            frequency_penalty = gr.Slider(minimum=-2, maximum=2, value=0, step=0.01, interactive=True,
+                                                          label="重複性處罰(Frequency Penalty)",
+                                                          info='值域為-2~+2，數值越大，對於重複用字會給予懲罰，數值越負，則鼓勵重複用字')
             with gr.TabItem("歷史"):
                 with gr.Column(elem_id="col_container"):
                     history_viewer = gr.JSON(elem_id='history_viewer')
@@ -376,8 +374,7 @@ if __name__ == '__main__':
                         with gr.Column(scale=1):
                             nlu_inputs = gr.Textbox(lines=6, placeholder="輸入句子...")
                         with gr.Column(scale=2):
-                            nlu_output = gr.Text(label="回傳的JSON視覺化", interactive=True, max_lines=40).style(
-                                show_copy_button=True)
+                            nlu_output = gr.Text(label="回傳的JSON視覺化", interactive=True, max_lines=40 ,show_copy_button=True)
                     nlu_button = gr.Button("送出")
             with gr.TabItem("Dall.E2"):
                 with gr.Column(variant="panel"):
@@ -387,13 +384,11 @@ if __name__ == '__main__':
                             show_label=False,
                             max_lines=1,
                             placeholder="請輸入中文的描述",
-                        ).style(
-                            container=False,
+                            container=False
                         )
-                    image_btn = gr.Button("設計與生成圖片").style(full_width=False)
+                    image_btn = gr.Button("設計與生成圖片" ,scale=1)
                     image_prompt = gr.Markdown("")
-                    image_gallery = gr.Gallery(value=None, show_label=False).style(columns=[4], object_fit="contain",
-                                                                                   height="auto")
+                    image_gallery = gr.Gallery(value=None, show_label=False,columns=[4], object_fit="contain",height="auto")
                 with gr.Accordion("超參數", open=False):
                     temperature2 = gr.Slider(minimum=-0, maximum=2.0, value=0.7, step=0.1, interactive=True,
                                              label="溫度 (Temperature)", )
@@ -527,8 +522,7 @@ if __name__ == '__main__':
                         with gr.Column(scale=1):
                             rewrite_inputs = gr.Textbox(lines=30, placeholder="輸入句子...")
                         with gr.Column(scale=1):
-                            rewrite_output = gr.Text(label="改寫", interactive=True, lines=30).style(
-                                show_copy_button=True)
+                            rewrite_output = gr.Text(label="改寫", interactive=True, lines=30,show_copy_button=True)
                     rewrite_button = gr.Button("送出")
             with gr.TabItem("長文本摘要"):
                 rolling_state = gr.State([])
@@ -544,7 +538,7 @@ if __name__ == '__main__':
                                                       placeholder="大量輸入...")
                         with gr.Column(scale=1):
                             summary_output = gr.Text(label="摘要", interactive=True, lines=30,
-                                                     max_lines=500).style(show_copy_button=True)
+                                                     max_lines=500,show_copy_button=True)
 
 
         inputs_event = inputs.submit(prompt_api,
