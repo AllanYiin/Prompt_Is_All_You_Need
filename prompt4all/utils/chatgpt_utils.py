@@ -8,8 +8,8 @@ import requests
 from pypdf import PdfReader, PdfWriter
 from PIL import Image
 from bs4 import BeautifulSoup
-from utils.tokens_utils import *
-from utils.regex_utils import *
+from prompt4all.utils.tokens_utils import *
+from prompt4all.utils.regex_utils import *
 
 __all__ = ['process_chat','process_url','process_context','build_message','regular_txt_to_markdown','get_next_paragraph','aggregate_summary','get_document_text']
 

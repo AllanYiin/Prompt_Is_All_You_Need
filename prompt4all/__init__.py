@@ -18,8 +18,8 @@ PROJECT_ROOT = os.path.dirname(PACKAGE_ROOT)
 __version__ = '0.0.1'
 stderr.write('prompt4all {0}\n'.format(__version__))
 
-from . import api
-from . import utils
+from prompt4all import api
+from prompt4all import utils
 #from . import gradio_chatbot_patch
 #from . import theme
 import threading

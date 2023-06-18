@@ -13,14 +13,14 @@ import openai_async
 nest_asyncio.apply()
 from collections import OrderedDict
 from datetime import datetime
-from utils.chatgpt_utils import *
-from utils.regex_utils import *
-import api.context_type as ContextType
-from api.base_api import *
-from utils.tokens_utils import *
+from prompt4all.utils.chatgpt_utils import *
+from prompt4all.utils.regex_utils import *
+import prompt4all.api.context_type as ContextType
+from prompt4all.api.base_api import *
+from prompt4all.utils.tokens_utils import *
 #from gradio_chatbot_patch import Chatbot as grChatbot
 # from gradio_css import code_highlight_css
-from theme import adjust_theme, advanced_css
+from prompt4all.theme import adjust_theme, advanced_css
 
 os.environ['no_proxy'] = '*'
 
