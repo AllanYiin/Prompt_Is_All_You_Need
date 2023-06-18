@@ -64,6 +64,8 @@ License-File: LICENSE
     git clone https://github.com/AllanYiin/Prompt_Is_All_You_Need
     cd Prompt_Is_All_You_Need
     pip install -r requirements.txt
+    
+
 
 開啟gradio_streamimg_chatbot.py，請依照指示將金鑰值賦值至環境變數OPENAI_API_KEY
 執行gradio_streamimg_chatbot.py即可

@@ -1,6 +1,5 @@
 import gradio as gr
 
-
 CODE_HIGHLIGHT=True
 ADD_WAIFU=True
 

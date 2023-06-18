@@ -2,12 +2,12 @@
 import regex
 
 __all__ = [
-    "choice_pattern","delta_pattern","replace_special_chars",'extract_score']
+    "choice_pattern","delta_pattern","json_pattern","replace_special_chars",'extract_score']
 choice_pattern =regex.compile(r'"choices":\s*\[(\{.*?\})\]')
 
 delta_pattern = regex.compile(r'"delta":\s*{"content":"([^"]*)"}')
 
-
+json_pattern = regex.compile(r'\{(?:[^{}]|(?R))*\}')
 
 def replace_special_chars(input_str):
     # 匹配除了英文、數字、漢字以外的字符
