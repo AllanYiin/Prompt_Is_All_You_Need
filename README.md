@@ -40,8 +40,26 @@
     git clone https://github.com/AllanYiin/Prompt_Is_All_You_Need
     cd Prompt_Is_All_You_Need
     pip install -r requirements.txt
+    pip install -e .
 
-開啟gradio_streamimg_chatbot.py，請依照指示將金鑰值賦值至環境變數OPENAI_API_KEY
-執行gradio_streamimg_chatbot.py即可
+或者是直接利用以下語法安裝:
 
-    python gradio_streamimg_chatbot.py
+    pip install prompt4all --upgrade
+
+
+請依照指示將金鑰值賦值至環境變數OPENAI_API_KEY
+執行以下語法即可啟動
+
+    python prompt4all.app
+
+
+### 金鑰值賦值方法: ###
+如果您是在windows平台:
+請在系統->進階系統設定->環境變數->使用者變數
+中點選「新增」，在變數名稱中輸入:“OPENAI_API_KEY”
+在值的部分輸入您的OpenAI API密鑰
+需要重開機才能有效抓取到金鑰值
+![prompt](prompt4all/images/enviorvariables.png)
+
+如果您是在linux平台:
+輸入以下命令：export OPENAI_API_KEY=your_api_key_here 將“your_api_key_here”替換為您的OpenAI API密鑰
