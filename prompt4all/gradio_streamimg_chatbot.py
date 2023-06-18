@@ -29,10 +29,11 @@ os.environ['no_proxy'] = '*'
 # os.environ['OPENAI_API_KEY']=#'你的金鑰值'
 if "OPENAI_API_KEY" not in os.environ:
     print("OPENAI_API_KEY  is not exists!")
-openai.api_key = os.getenv("OPENAI_API_KEY")
-URL = "https://api.openai.com/v1/chat/completions"
 
-pattern = regex.compile(r'\{(?:[^{}]|(?R))*\}')
+openai.api_key = os.getenv("OPENAI_API_KEY")
+
+
+
 
 
 def index2context(idx: int):
@@ -88,7 +89,7 @@ def nlu_api(text_input):
                 "content": txt
             }
         ]
-        jstrs = pattern.findall(baseChatGpt.post_and_get_answer(conversation, _parameters))
+        jstrs = json_pattern.findall(baseChatGpt.post_and_get_answer(conversation, _parameters))
         jstrs = jstrs[0] if len(jstrs) == 1 else '[' + ', '.join(jstrs) + ']'
         output_json = json.loads(jstrs)
         results.append(json.dumps(output_json, ensure_ascii=False, indent=3))
@@ -323,6 +324,8 @@ def pause_message():
 if __name__ == '__main__':
     PORT = 7860
     title = """<h1 align="center">🔥🤖Prompt is All You Need! 🚀</h1>"""
+    if "OPENAI_API_KEY" not in os.environ:
+        title = """<h1 align="center">🔥🤖Prompt is All You Need! 🚀</h1><br><h2 align="center"><span style='color:red'>你尚未設置api key</span></h2>"""
     description = ""
     cancel_handles = []
     with gr.Blocks(title="Prompt is what you need!", css=advanced_css, analytics_enabled=False,
