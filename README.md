@@ -14,11 +14,13 @@
 * ChatGPT inside的傳統自然語言處理任務
 * ChatGPT 與Dall.E2協作
 * 語氣改寫
+* 長文本滾動式摘要以及平行分塊摘要
 * ~~coming soon 會議錄音自動整理!!!!
 ![prompt](prompt4all/images/dark1.png)
 ![prompt](prompt4all/images/ui_2.png)
 ![prompt](prompt4all/images/dalle2_1.png)
 ![prompt](prompt4all/images/rewrite1.png)
+![prompt](prompt4all/images/blocks_summary.png)
 
 ### 目前這個專案正在實現: ###
 * 更彈性的上下文管理機制，目前預計會有
