@@ -19,9 +19,10 @@ import cv2
 import PIL.Image as pil_image
 from base64 import b64decode
 import prompt4all.api.context_type as ContextType
-from utils.regex_utils import *
-from utils.chatgpt_utils import process_context, process_chat
-from utils.tokens_utils import num_tokens_from_history, estimate_used_tokens
+from prompt4all.utils.regex_utils import *
+
+from prompt4all.utils.chatgpt_utils import process_context, process_chat
+from prompt4all.utils.tokens_utils import num_tokens_from_history, estimate_used_tokens
 #from tiktoken import Tokenizer, TokenizerWrapper
 from typing import List, Dict, TypedDict
 
@@ -536,20 +537,20 @@ class GptBaseApi:
         estimate_tokens = sum(
             [estimate_used_tokens(message['content']) + estimate_used_tokens(message['role']) + 4 for message in
              message_context]) + 2
-        response = openai.ChatCompletion.create(
-            model=self.API_MODEL,
-            messages=message_context,
-            temperature=parameters.get('temperature')
-        )
+        payload = self.parameters2payload(self.API_MODEL, message_context, parameters,stream=False)
+
+        response = requests.post(self.BASE_URL, headers=self.API_HEADERS, json=payload, stream=False)
+
         try:
             # 解析返回的JSON結果
-            answer = response.choices[0].message['content'].strip()
-            prompt_tokens = response["usage"]['prompt_tokens']
-            completion_tokens = response["usage"]['completion_tokens']
-            estimate_tokens2 = estimate_used_tokens(answer) + 4
-            return response.choices[0].message['content'].strip()
+            tt=response.content.decode()
+            this_choice = json.loads(response.content.decode())['choices'][0]
+            # prompt_tokens =  response.json()["usage"]["usage"]['prompt_tokens']
+            # completion_tokens = response.json()["usage"]["usage"]['completion_tokens']
+            # estimate_tokens2 = estimate_used_tokens(answer) + 4
+            return this_choice["message"]['content'].strip()
         except Exception as e:
-            return response.choices[0].message['content'].strip() + "\n" + str(e)
+            return str(response.json()) + "\n" + str(e)
 
 
     def generate_images(self, input_prompt, shorter_prompt=None, image_size=256):
