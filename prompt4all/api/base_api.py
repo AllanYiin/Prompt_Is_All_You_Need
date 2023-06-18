@@ -364,7 +364,7 @@ class GptBaseApi:
                 asyncio.set_event_loop(loop)
                 tasks = [asyncio.ensure_future(self.summarize_text(text_input=partial_words, timeout=60))]
                 loop.run_until_complete(asyncio.wait(tasks))
-                response = tasks[0].result()
+                response =tasks[0].result()
                 summarization_text = response["content"].strip()
                 full_history[-1]['summary'] = summarization_text
                 full_history[-1]['summary_tokens'] = response["total_tokens"] + estimate_used_tokens('assistant',model_name=self.API_MODEL) + 4
@@ -499,24 +499,22 @@ class GptBaseApi:
                 "content": text_input
             }
         ]
+        paras=copy.deepcopy(self.API_PARAMETERS)
+        paras['temperature']=1e-5
+        payload = self.parameters2payload(self.API_MODEL, conversation, paras,stream=False)
 
-        response = await openai_async.chat_complete(
-            api_key=os.getenv("OPENAI_API_KEY"),
-            timeout=timeout,
-            payload={
-                "model": self.API_MODEL,
-                "messages": conversation,
-                "temperature": 0.01
-            },
+        response = await asyncio.to_thread(
+            requests.post,
+            self.BASE_URL, headers=self.API_HEADERS, json=payload, stream=False
         )
-        try:
-            # 解析返回的JSON結果
-            summary = response.json()["choices"][0]["message"]
-            total_tokens = response.json()["usage"]['completion_tokens']
-            summary['total_tokens'] = total_tokens
-            return summary
-        except Exception as e:
-            return await response.choices[0].message['content'].strip() + "\n" + str(e)
+
+
+        # 解析返回的JSON結果
+        this_choice = json.loads(response.content.decode())['choices'][0]
+        summary = this_choice["message"]
+        summary['total_tokens'] = response.json()["usage"]['completion_tokens']
+        return summary
+
 
     def post_and_get_answer(self, message_context, parameters, full_history=None):
         """發問並獲取答案
