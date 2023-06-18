@@ -50,7 +50,7 @@
 請依照指示將金鑰值賦值至環境變數OPENAI_API_KEY
 執行以下語法即可啟動
 
-    python prompt4all.app
+    python -m prompt4all.app
 
 
 ### 金鑰值賦值方法: ###
