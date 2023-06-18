@@ -2,7 +2,7 @@
 
 這個專案是我基於openai api將我的一些想法落實的實驗場
 一切都會環繞在如何協助人們更有效率的運用prompt來實現複雜的任務
-![prompt](prompt_is_all_you_need/images/ui_1.png)
+![prompt](prompt4all/images/ui_1.png)
 
 ### 目前這個專案中已經實現了: ###
 * 暗黑模式 (new)
@@ -15,10 +15,10 @@
 * ChatGPT 與Dall.E2協作
 * 語氣改寫
 * ~~coming soon 會議錄音自動整理!!!!
-![prompt](prompt_is_all_you_need/images/dark1.png)
-![prompt](prompt_is_all_you_need/images/ui_2.png)
-![prompt](prompt_is_all_you_need/images/dalle2_1.png)
-![prompt](prompt_is_all_you_need/images/rewrite1.png)
+![prompt](prompt4all/images/dark1.png)
+![prompt](prompt4all/images/ui_2.png)
+![prompt](prompt4all/images/dalle2_1.png)
+![prompt](prompt4all/images/rewrite1.png)
 
 ### 目前這個專案正在實現: ###
 * 更彈性的上下文管理機制，目前預計會有

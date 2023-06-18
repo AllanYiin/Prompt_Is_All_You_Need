@@ -1,4 +1,4 @@
-gradio>=3.25.0
+gradio>=3.35.0
 regex>=2022.10.31
 openai>=0.27.2
 requests>=2.28.1

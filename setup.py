@@ -8,7 +8,7 @@ from setuptools import setup, find_packages
 
 
 
-NAME = "prompt_is_all_you_need"
+NAME = "prompt4all"
 DIR = '.'
 
 PACKAGES = find_packages(exclude= ["whisper",".idea","audio","generate_interviews"])
@@ -36,7 +36,7 @@ setup(name=NAME,
       long_description_content_type="text/markdown",
       author='Allan Yiin',
       author_email='allanyiin.ai@gmail.com',
-      download_url='https://test.pypi.org/project/prompt_is_all_you_need',
+      download_url='https://test.pypi.org/project/prompt4all',
       license='MIT',
       install_requires=install_requires,
       extras_require={
@@ -53,8 +53,6 @@ setup(name=NAME,
           'Intended Audience :: Education',
           'Intended Audience :: Science/Research',
           'License :: OSI Approved :: MIT License',
-          'Programming Language :: Python :: 3.5',
-          'Programming Language :: Python :: 3.6',
           'Programming Language :: Python :: 3.7',
           'Programming Language :: Python :: 3.8',
           'Programming Language :: Python :: 3.9',
@@ -64,7 +62,7 @@ setup(name=NAME,
       python_requires='>=3.7',
       keywords=['chatgpt', 'gpt4'],
       packages= find_packages(exclude= ["whisper",".idea","audio","generate_interviews"]),
-      include_package_data=True,
+      include_package_data=False,
       scripts=[],
 
       )
