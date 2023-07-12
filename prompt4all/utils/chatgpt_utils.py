@@ -11,10 +11,13 @@ from bs4 import BeautifulSoup
 from prompt4all.utils.tokens_utils import *
 from prompt4all.utils.regex_utils import *
 
-__all__ = ['process_chat','process_url','process_context','build_message','regular_txt_to_markdown','get_next_paragraph','aggregate_summary','get_document_text']
+__all__ = ['process_chat','process_url','process_context','build_message','regular_txt_to_markdown','get_next_paragraph','get_document_text']
+
+
+
 
 def regular_txt_to_markdown(text):
-    text = text.replace('\n', '\n\n')
+    text = text.replace('\n', '  \n')
     text = text.replace('\n\n\n', '\n\n')
     text = text.replace('\n\n\n', '\n\n')
     return text
@@ -226,26 +229,17 @@ def get_next_paragraph(paragraphs, max_tokens):
     current_tokens = 0
     for paragraph in paragraphs:
         tokens =estimate_used_tokens(paragraph)
-        if current_tokens + tokens + 1 > max_tokens:
+        if paragraph==paragraphs[-1]:
+            result.append(paragraph)
+            current_tokens += tokens + 1
+            paragraphs_bk.pop(0)
+        elif (current_tokens + tokens + 1 > max_tokens):
             break
         else:
             result.append(paragraph)
             current_tokens += tokens + 1
             paragraphs_bk.pop(0)
-    paragraphs=paragraphs_bk
     return result, paragraphs_bk
 
 
-def aggregate_summary(results):
-    aggs=[]
-    for  result in results:
 
-        if isinstance(result,dict):
-            if len(aggs) == 0:
-                aggs.append(result['content'].split('\n')[0])
-            aggs.extend([c for c in result['content'].split('\n') if c.startswith('-')])
-        elif isinstance(result,str):
-            if len(aggs) == 0:
-                aggs.append(result.split('\n')[0])
-            aggs.extend([c for c in result.split('\n') if c.startswith('-')])
-    return  '\n'.join(aggs)
