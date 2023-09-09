@@ -15,13 +15,13 @@ if sys.getdefaultencoding() != defaultencoding:
 PACKAGE_ROOT = os.path.dirname(__file__)
 PROJECT_ROOT = os.path.dirname(PACKAGE_ROOT)
 
-__version__ = '0.0.2'
+__version__ = '0.0.5'
 stderr.write('prompt4all {0}\n'.format(__version__))
 
 from prompt4all import api
 from prompt4all import utils
-#from . import gradio_chatbot_patch
-#from . import theme
+from prompt4all import prompts
+
 import threading
 import random
 import glob
