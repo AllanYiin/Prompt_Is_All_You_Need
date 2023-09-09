@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: prompt4all
-Version: 0.0.2
+Version: 0.0.5
 Summary: Prompt is all you need
 Download-URL: https://test.pypi.org/project/prompt4all
 Author: Allan Yiin
@@ -38,11 +38,13 @@ License-File: LICENSE
 * ChatGPT inside的傳統自然語言處理任務
 * ChatGPT 與Dall.E2協作
 * 語氣改寫
+* 長文本滾動式摘要以及平行分塊摘要
 * ~~coming soon 會議錄音自動整理!!!!
 ![prompt](prompt4all/images/dark1.png)
 ![prompt](prompt4all/images/ui_2.png)
 ![prompt](prompt4all/images/dalle2_1.png)
 ![prompt](prompt4all/images/rewrite1.png)
+![prompt](prompt4all/images/blocks_summary.png)
 
 ### 目前這個專案正在實現: ###
 * 更彈性的上下文管理機制，目前預計會有
@@ -74,7 +76,7 @@ License-File: LICENSE
 請依照指示將金鑰值賦值至環境變數OPENAI_API_KEY
 執行以下語法即可啟動
 
-    python prompt4all.app
+    python -m prompt4all.app
 
 
 ### 金鑰值賦值方法: ###
