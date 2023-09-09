@@ -7,6 +7,7 @@ import string
 from collections import OrderedDict
 from prompt4all.utils.regex_utils import is_numbered_list_member,extract_numbered_list_member
 from prompt4all.utils.tokens_utils import estimate_used_tokens
+
 __all__ = [ "get_rolling_summary_results", "get_last_ordered_index", "split_summary","text2markdown",'reorder_list','aggregate_summary']
 
 
@@ -119,28 +120,28 @@ def get_rolling_summary_results(answer):
             return content_dict[list(content_dict.keys())[value_list.index(max_value)]]
 
 
-def convert_bullet_to_number_list(content, linesep=os.linesep):
-    """Replace bullet point list with number list, for example
-
-    Sample input:
-    - 第03章新商業智慧平台安裝與設定
-      - 安裝SSRS 2012的前置需求
-        - 版本限制
-          - 標準版（Standard Edition）
-            - 提供報表設計、管理和部署功能
-            - 不支援進階功能如Power View、資料驅動訂閱和Web Farm架構
-          - 商業智慧版（Business Intelligence Edition）
-
-    Sample output:
-    1. 第03章新商業智慧平台安裝與設定
-      1.1 安裝SSRS 2012的前置需求
-        1.1.1 版本限制
-          1.1.1.1 標準版（Standard Edition）
-            1.1.1.1.1 提供報表設計、管理和部署功能
-            1.1.1.1.2 不支援進階功能如Power View、資料驅動訂閱和Web Farm架構
-          1.1.1.2 商業智慧版（Business Intelligence Edition）
+def convert_bullet_to_number_list(content, linesep='\n'):
     """
-    lines = content.split(linesep)
+    將一個包含項目符號的文字內容轉換為一個包含數字列表的文字內容。
+    Args:
+        content (str): 要轉換的文字內容，每一行是一個項目，可以有不同的縮排層級。
+        linesep (str): 文字內容中使用的換行符號，預設為os.linesep。
+
+    Returns:
+        str: 轉換後的文字內容，每一個項目都用數字來標示，例如1. 2. 3. 或者1.1. 1.2. 1.3. 等。
+
+    Examples:
+        >>> content = "- first item\\n  - second item\\n    - third item\\n- fourth item"
+        >>> print(convert_bullet_to_number_list(content,linesep='\\n'))
+        1. first item
+          1.1 second item
+            1.1.1 third item
+        2. fourth item
+    """
+    if isinstance(content,list):
+        lines=content
+    else:
+        lines = content.split(linesep)
 
     # region Step 1: Find number of spaces used for indentation
     indents = [len(line) - len(line.lstrip()) for line in lines if line.strip()]
@@ -206,8 +207,11 @@ def aggregate_summary(results):
         # print("=" * 80) # for debug
         aggs = convert_bullet_to_number_list(raw_lines)
         # print(os.linesep.join(aggs)) # for debug
-    aggs = os.linesep.join(aggs) # convert to a string for display
-    return aggs
+    if isinstance(aggs,str):
+        return aggs
+    else:
+        aggs = '\n'.join(aggs) # convert to a string for display
+        return aggs
 
 def split_summary(summary_list,max_tokens):
     if isinstance(summary_list,str):
