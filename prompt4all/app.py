@@ -30,8 +30,11 @@ import prompt4all.api.context_type as ContextType
 from prompt4all.api.base_api import *
 from prompt4all.utils.tokens_utils import *
 from prompt4all.utils.summary_utils import *
+from prompt4all.utils.pdf_utils import *
 from prompt4all.theme import adjust_theme, advanced_css
 from prompt4all.utils.whisper_utils import *
+
+
 from prompt4all import context
 from prompt4all.context import *
 from prompt4all.common import find_available_port
