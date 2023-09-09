@@ -5,13 +5,15 @@ import os
 import platform
 import sys
 import threading
+import traceback
+import linecache
 from collections import OrderedDict
 from functools import partial
 import numpy as np
 
 _prompt4all_context=None
 
-
+__all__ = ["sanitize_path","split_path","make_dir_if_need","_context","get_sitepackages", "PrintException"]
 
 
 def sanitize_path(path):
@@ -87,6 +89,24 @@ def make_dir_if_need(path):
             print(e)
             sys.stderr.write('folder:{0} is not valid path'.format(folder))
     return sanitize_path(path)
+
+
+def PrintException():
+    """
+        Print exception with the line_no.
+
+    """
+    exc_type, exc_obj, tb = sys.exc_info()
+    traceback.print_exception(*sys.exc_info())
+    f = tb.tb_frame
+    lineno = tb.tb_lineno
+    filename = f.f_code.co_filename
+    linecache.checkcache(filename)
+    line = linecache.getline(filename, lineno, f.f_globals)
+    print('EXCEPTION IN ({}, LINE {} "{}"): {}\n'.format(filename, lineno, line.strip(), exc_obj))
+    traceback.print_exc(limit=None, file=sys.stderr)
+    # traceback.print_tb(tb, limit=1, file=sys.stdout)
+    # traceback.print_exception(exc_type, exc_obj, tb, limit=2, file=sys.stdout)
 
 
 def get_sitepackages():  # pragma: no cover

@@ -5,13 +5,14 @@ import io
 import regex
 import json
 import requests
-from pypdf import PdfReader, PdfWriter
+
 from PIL import Image
 from bs4 import BeautifulSoup
 from prompt4all.utils.tokens_utils import *
 from prompt4all.utils.regex_utils import *
+from prompt4all.utils.pdf_utils import *
 
-__all__ = ['process_chat','process_url','process_context','build_message','regular_txt_to_markdown','get_next_paragraph','get_document_text']
+__all__ = ['process_chat','process_url','process_context','build_message','regular_txt_to_markdown','get_next_paragraph']
 
 
 
@@ -56,6 +57,7 @@ def process_url(url):
 
         text_type = '網頁文字'
     elif 'application/pdf' in content_type:
+        page_map=get_document_text
         import PyPDF2
         with io.BytesIO(response.content) as pdf_file:
             pdf_reader = PyPDF2.PdfReader(pdf_file)
@@ -124,17 +126,6 @@ MAX_SECTION_LENGTH = 1000
 SENTENCE_SEARCH_LIMIT = 100
 SECTION_OVERLAP = 100
 
-def get_document_text(filename):
-    offset = 0
-    page_map = []
-
-    reader = PdfReader(filename)
-    pages = reader.pages
-    for page_num, p in enumerate(pages):
-        page_text = p.extract_text()
-        page_map.append((page_num, offset, page_text))
-        offset += len(page_text)
-    return page_map
 
 
 def split_text(page_map):

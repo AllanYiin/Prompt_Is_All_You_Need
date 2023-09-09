@@ -1,5 +1,6 @@
+import os.path
 import pathlib
-
+import os
 import pkg_resources
 from setuptools import setup, find_packages
 
@@ -24,11 +25,14 @@ with pathlib.Path('requirements.txt').open() as requirements_txt:
         in pkg_resources.parse_requirements(requirements_txt)
     ]
 
-
+if not os.path.exists('generate_images'):
+    os.mkdir('generate_images')
+if not os.path.exists('generate_text'):
+    os.mkdir('generate_text')
 
 
 setup(name=NAME,
-      version='0.0.2',
+      version='0.0.5',
       description='Prompt is all you need',
       # long_description=long_description,
       # long_description_content_type="text/markdown",

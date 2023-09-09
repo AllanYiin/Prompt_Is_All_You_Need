@@ -2,7 +2,7 @@
 import regex
 
 __all__ = [
-    "choice_pattern","delta_pattern","json_pattern","replace_special_chars",'extract_score','triplequote_pattern','is_numbered_list_member','extract_numbered_list_member']
+    "choice_pattern","delta_pattern","json_pattern",'numbered_list_member_pattern','unordered_listitem_pattern',"replace_special_chars",'extract_score','triplequote_pattern','is_numbered_list_member','is_unordered_list_member','extract_numbered_list_member']
 choice_pattern =regex.compile(r'"choices":\s*\[(\{.*?\})\]')
 
 delta_pattern = regex.compile(r'"delta":\s*{"content":"([^"]*)"}')
@@ -11,6 +11,7 @@ json_pattern = regex.compile(r'\{(?:[^{}]|(?R))*\}')
 
 triplequote_pattern=regex.compile(r"```(.*)```")
 
+unordered_listitem_pattern=regex.compile(r"\s*([-*+])\s+(.*)$")
 numbered_list_member_pattern=regex.compile(r'\s*(\d+(\.\d+)*\.?)(?=\s)')
 
 
@@ -36,6 +37,9 @@ def extract_score(text):
 def is_numbered_list_member(string):
     return bool(regex.match(numbered_list_member_pattern, string))
 
+def is_unordered_list_member(string):
+    return bool(regex.match(unordered_listitem_pattern, string))
+
 def extract_numbered_list_member(string):
     """
 
@@ -57,6 +61,32 @@ def extract_numbered_list_member(string):
         None
     """
     match = regex.search(numbered_list_member_pattern, string)
+    if match:
+        return match.group(1)
+    else:
+        return ''
+
+def extract_unordered_list_member(string):
+    """
+
+    :param string:
+    :return:
+
+    Examples:
+        >>> print(extract_unordered_list_member("1. This is a numbered list member."))
+        <BLANKLINE>
+        >>> print(extract_unordered_list_member("- This is a numbered list member."))
+        -
+        >>> print(extract_unordered_list_member("    - This is a numbered list member."))
+        -
+        >>> print(extract_unordered_list_member("   -This is a numbered list member."))
+        -
+        >>> print(extract_unordered_list_member("    + This is a numbered list member."))
+        +
+        >>> print(extract_unordered_list_member("This is a numbered list member."))
+        <BLANKLINE>
+    """
+    match = regex.search(unordered_listitem_pattern, string)
     if match:
         return match.group(1)
     else:
