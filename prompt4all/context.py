@@ -234,6 +234,7 @@ class _Context:
         self._module_dict = dict()
         self.prompt4all_dir = self.get_prompt4all_dir()
         self.backend =None
+        self.conversation_history=None
         self.print=partial(print,flush=True)
         site_packages=get_sitepackages()
 
@@ -242,12 +243,6 @@ class _Context:
         self.working_directory = os.getcwd()
         self.plateform = self.get_plateform()
         self.numpy_print_format = '{0:.4e}'
-
-
-
-        if 'COLAB_TPU_ADDR' in os.environ:
-            self.tpu_address = 'grpc://' + os.environ['COLAB_TPU_ADDR']
-            print('TPU is available.')
 
         _config_path = os.path.expanduser(os.path.join(self.prompt4all_dir, 'prompt4all.json'))
         _config = {}
