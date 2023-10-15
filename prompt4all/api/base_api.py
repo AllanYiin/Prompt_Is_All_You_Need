@@ -387,7 +387,7 @@ class GptBaseApi:
                 print(e)
                 PrintException()
             # 檢查finish_reason是否為length
-            while finish_reason != '[DONE]' and finish_reason != '[EXCEPTION]':
+            while finish_reason =='length' :
                 # 自動以user角色發出「繼續寫下去」的PROMPT
                 prompt = "繼續"
                 # 調用openai.ChatCompletion.create來生成機器人的回答
@@ -442,9 +442,9 @@ class GptBaseApi:
 
             if len(partial_words) > 200:
 
-                summarization_text = threading.Thread(target=self.summarize_text,args=(partial_words,60), name="open-browser", daemon=True,).start()
+                summarization_text =self.summarize_text(partial_words,60)
                 full_history[-1]['summary'] = summarization_text
-                full_history[-1]['summary_tokens'] = response["total_tokens"] + estimate_used_tokens('assistant',model_name=self.API_MODEL) + 4
+                full_history[-1]['summary_tokens'] = estimate_used_tokens(summarization_text,model_name=self.API_MODEL) + estimate_used_tokens('assistant',model_name=self.API_MODEL) + 4
 
             full_history[-1]["estimate_tokens"] = estimate_used_tokens(partial_words,
                                                                        model_name=self.API_MODEL) + estimate_used_tokens(
@@ -540,7 +540,7 @@ class GptBaseApi:
 
 
 
-    async def summarize_text(self, text_input,timeout=120):
+    def summarize_text(self, text_input,timeout=120):
         """post 串流形式的對話
         :param text_input:
         :param timeout:
@@ -561,19 +561,8 @@ class GptBaseApi:
         ]
         paras=copy.deepcopy(self.API_PARAMETERS)
         paras['temperature']=1e-5
-        payload = self.parameters2payload(self.API_MODEL, conversation, paras,stream=False)
-
-        response = await asyncio.to_thread(
-            requests.post,
-            self.BASE_URL, headers=self.API_HEADERS, json=payload, stream=False
-        )
-
-
-        # 解析返回的JSON結果
-        this_choice = json.loads(response.content.decode())['choices'][0]
-        summary = this_choice["message"]
-        summary['total_tokens'] = response.json()["usage"]['completion_tokens']
-        return summary
+        completion = self.make_response(self.API_MODEL, conversation, paras, stream=False)
+        return completion.choices[0].message.content
 
 
     def post_and_get_answer(self, message_context, parameters, full_history=None):
