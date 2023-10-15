@@ -11,7 +11,7 @@ from bs4 import BeautifulSoup
 from prompt4all.utils.tokens_utils import *
 from prompt4all.utils.regex_utils import *
 from prompt4all.utils.pdf_utils import *
-
+from prompt4all.common import *
 __all__ = ['process_chat','process_url','process_context','build_message','regular_txt_to_markdown','get_next_paragraph']
 
 
@@ -25,7 +25,7 @@ def regular_txt_to_markdown(text):
 
 def process_chat(conversation_dict: dict):
     if conversation_dict['role'] == 'user':
-        return '😲:\n' + regular_txt_to_markdown(conversation_dict['content']) + "\n"
+        return '👨:\n' + regular_txt_to_markdown(conversation_dict['content']) + "\n"
     elif conversation_dict['role'] == 'assistant':
         return '🤖:\n' + regular_txt_to_markdown(conversation_dict['content'])+ "\n"
     elif conversation_dict['role'] == 'system':
