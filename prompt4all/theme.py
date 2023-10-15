@@ -110,6 +110,7 @@ def adjust_theme():
 
 advanced_css = """
 .contain { display: flex; flex-direction: column; }
+#rolling_file {height: 75px;}
 #component-0 { height: 100%; }
 #chatbot { flex-grow: 1; }
 
