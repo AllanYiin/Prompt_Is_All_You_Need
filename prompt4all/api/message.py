@@ -12,7 +12,7 @@ import itertools
 from prompt4all import context
 from prompt4all.context import split_path
 from prompt4all.common import unpack_singleton
-
+from prompt4all.utils.chatgpt_utils import *
 __all__ = ["ConversationHistory", "Conversation", "Message", "Mapping", "Content", "Author",
            "initialize_conversation_history"]
 

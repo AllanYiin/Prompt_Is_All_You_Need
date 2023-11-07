@@ -38,7 +38,10 @@ model_info = {
         "endpoint": 'https://api.openai.com/v1/chat/completions',
         "max_token": 4096
     },
-
+    "gpt-4-1106-preview": {
+        "endpoint": 'https://api.openai.com/v1/chat/completions',
+        "max_token": 128000
+    },
     "gpt-4": {
         "endpoint": 'https://api.openai.com/v1/chat/completions',
         "max_token": 8192
@@ -129,7 +132,7 @@ model_info = {
 
 
 class GptBaseApi:
-    def __init__(self, model="gpt-3.5-turbo-0613", temperature=0.5, system_message='所有內容以繁體中文書寫'):
+    def __init__(self, model="gpt-4-1106-preview", temperature=0.5, system_message='所有內容以繁體中文書寫'):
         self.API_MODEL=None
         self.API_TYPE=None
         self.BASE_URL =None
@@ -350,25 +353,23 @@ class GptBaseApi:
 
             finish_reason = 'None'
             try:
+                full_history.append({"role": "assistant", "content": partial_words, "context_type": context_type})
                 for chunk in completion:
                     try:
-                        this_choice = chunk_message = chunk['choices'][0]
-                        this_delta = this_choice['delta']
-                        finish_reason = this_choice['finish_reason']
-                        if ( 'data: [DONE]' in this_choice):  # or (len(json.loads(chunk_decoded[6:])['choices'][0]["delta"]) == 0):
-                            finish_reason = '[DONE]'
-                            break
+                        this_choice = chunk_message = chunk.choices[0]
+                        this_delta = this_choice.delta
+                        finish_reason = this_choice.finish_reason
 
-                        if 'content' in this_choice['delta']:
-                            partial_words += this_delta['content']
 
-                            if token_counter == 0:
-                                full_history.append(
-                                    {"role": "assistant", "content": partial_words, "context_type": context_type})
-                            else:
-                                full_history[-1]['content'] = partial_words
+                        if this_choice.delta.content is not None:
+                            partial_words += this_delta.content
+
+
+                            full_history[-1]['content'] = partial_words
 
                             token_counter += 1
+                        if finish_reason == 'stop':
+                            break
 
                     except Exception as e:
                         finish_reason = '[EXCEPTION]'
@@ -382,6 +383,7 @@ class GptBaseApi:
                     answer = full_history[-1]['content']
 
                     yield chat, answer, full_history
+                print('')
             except Exception as e:
                 finish_reason = '[EXCEPTION]'
                 print(e)
@@ -400,16 +402,16 @@ class GptBaseApi:
 
                 for chunk in completion2:
                     try:
-                        this_choice = chunk_message = chunk['choices'][0]
-                        this_delta = this_choice['delta']
-                        finish_reason = this_choice['finish_reason']
-                        if (
-                                'data: [DONE]' in this_choice):  # or (len(json.loads(chunk_decoded[6:])['choices'][0]["delta"]) == 0):
-                            finish_reason = '[DONE]'
-                            break
+                        this_choice = chunk_message = chunk.choices[0]
+                        this_delta = this_choice.delta
+                        finish_reason = this_choice.finish_reason
+                        # if (
+                        #         'data: [DONE]' in this_choice):  # or (len(json.loads(chunk_decoded[6:])['choices'][0]["delta"]) == 0):
+                        #     finish_reason = '[DONE]'
+                        #     break
 
-                        if 'content' in this_choice['delta']:
-                            partial_words += this_delta['content']
+                        if this_choice.delta.content is not None:
+                            partial_words += this_delta.content
                             if token_counter == 0:
                                 full_history.append(
                                     {"role": "assistant", "content": partial_words, "context_type": context_type})
@@ -500,7 +502,7 @@ class GptBaseApi:
                         break
                 answer = full_history[-1]['content']
                 yield answer, full_history
-            while finish_reason != '[DONE]' and finish_reason != '[EXCEPTION]':
+            while finish_reason != 'STOP' and finish_reason != '[EXCEPTION]':
                 # 自動以user角色發出「繼續寫下去」的PROMPT
                 prompt = "繼續"
                 # 調用openai.ChatCompletion.create來生成機器人的回答

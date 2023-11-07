@@ -1015,11 +1015,18 @@ def clear_history():
 
 
 def reset_textbox():
-    return gr.update(value='')
+    return gr.Textbox(placeholder="什麼是LLM?",
+                                                        label="輸入文字後按enter", lines=10, max_lines=2000)
 
 
 def reset_context():
-    return gr.update(value="[@PROMPT] 一般指令")
+    return gr.Dropdown(
+                                        ["[@PROMPT] 一般指令", "[@GLOBAL] 全局指令", "[@SKIP] 跳脫上文",
+                                         "[@SANDBOX] 沙箱隔絕",
+                                         "[@EXPLAIN] 解釋上文", "[@OVERRIDE] 覆寫全局"],
+                                        value="[@PROMPT] 一般指令", type='index', label="context處理",
+                                        elem_id='context_type',
+                                        interactive=True)
 
 
 def pause_message():
@@ -1035,10 +1042,10 @@ if __name__ == '__main__':
     cancel_handles = []
     with gr.Blocks(title="Prompt is what you need!", css=advanced_css, analytics_enabled=False,
                    theme=adjust_theme()) as demo:
-        baseChatGpt = GptBaseApi(model="gpt-3.5-turbo-0613")
-        summaryChatGpt = GptBaseApi(model="gpt-3.5-turbo-0613")
-        imageChatGpt = GptBaseApi(model="gpt-4-0613")
-        otherChatGpt = GptBaseApi(model="gpt-3.5-turbo-0613")
+        baseChatGpt = GptBaseApi(model="gpt-4-1106-preview")
+        summaryChatGpt = GptBaseApi(model="gpt-4-1106-preview")
+        imageChatGpt = GptBaseApi(model="gpt-4-1106-preview")
+        otherChatGpt = GptBaseApi(model="gpt-4-1106-preview")
         state = gr.State([{"role": "system", "content": '所有內容以繁體中文書寫',
                            "estimate_tokens": estimate_used_tokens('所有內容以繁體中文書寫',
                                                                    model_name=baseChatGpt.API_MODEL)}])  # s
@@ -1330,13 +1337,13 @@ if __name__ == '__main__':
                             rolling_history_viewer = gr.JSON(elem_id='rolling_history_viewer')
             with gr.TabItem("設定"):
                 with gr.Column():
-                    dropdown_api1 = gr.Dropdown(choices=[k for k in model_info.keys()], value="gpt-3.5-turbo-0613",
+                    dropdown_api1 = gr.Dropdown(choices=[k for k in model_info.keys()], value="gpt-4-1106-preview",
                                                 label="對話使用之api", interactive=True)
-                    dropdown_api4 = gr.Dropdown(choices=[k for k in model_info.keys()], value="gpt-4-0613",
+                    dropdown_api4 = gr.Dropdown(choices=[k for k in model_info.keys()], value="gpt-4-1106-preview",
                                                 label="以文生圖使用之api", interactive=True)
-                    dropdown_api2 = gr.Dropdown(choices=[k for k in model_info.keys()], value="gpt-3.5-turbo-0613",
+                    dropdown_api2 = gr.Dropdown(choices=[k for k in model_info.keys()], value="gpt-4-1106-preview",
                                                 label="長文本摘要使用之api", interactive=True)
-                    dropdown_api3 = gr.Dropdown(choices=[k for k in model_info.keys()], value="gpt-3.5-turbo-0613",
+                    dropdown_api3 = gr.Dropdown(choices=[k for k in model_info.keys()], value="gpt-4-1106-preview",
                                                 label="其他功能使用之api", interactive=True)
 
 
