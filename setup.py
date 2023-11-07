@@ -32,7 +32,7 @@ if not os.path.exists('generate_text'):
 
 
 setup(name=NAME,
-      version='0.0.5',
+      version='0.0.6',
       description='Prompt is all you need',
       # long_description=long_description,
       # long_description_content_type="text/markdown",
