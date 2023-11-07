@@ -1015,7 +1015,7 @@ def clear_history():
 
 
 def reset_textbox():
-    return gr.Textbox(placeholder="什麼是LLM?",
+    return gr.Textbox(placeholder="什麼是LLM?",value="",
                                                         label="輸入文字後按enter", lines=10, max_lines=2000)
 
 
