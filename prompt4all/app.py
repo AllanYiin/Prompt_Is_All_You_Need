@@ -1043,7 +1043,7 @@ if __name__ == '__main__':
     with gr.Blocks(title="Prompt is what you need!", css=advanced_css, analytics_enabled=False,
                    theme=adjust_theme()) as demo:
         baseChatGpt = GptBaseApi(model="gpt-4-1106-preview")
-        summaryChatGpt = GptBaseApi(model="gpt-4-1106-preview")
+        summaryChatGpt = GptBaseApi(model="gpt-3.5-turbo-16k-0613")
         imageChatGpt = GptBaseApi(model="gpt-4-1106-preview")
         otherChatGpt = GptBaseApi(model="gpt-4-1106-preview")
         state = gr.State([{"role": "system", "content": '所有內容以繁體中文書寫',
@@ -1341,7 +1341,7 @@ if __name__ == '__main__':
                                                 label="對話使用之api", interactive=True)
                     dropdown_api4 = gr.Dropdown(choices=[k for k in model_info.keys()], value="gpt-4-1106-preview",
                                                 label="以文生圖使用之api", interactive=True)
-                    dropdown_api2 = gr.Dropdown(choices=[k for k in model_info.keys()], value="gpt-4-1106-preview",
+                    dropdown_api2 = gr.Dropdown(choices=[k for k in model_info.keys()], value="gpt-3.5-turbo-16k-0613",
                                                 label="長文本摘要使用之api", interactive=True)
                     dropdown_api3 = gr.Dropdown(choices=[k for k in model_info.keys()], value="gpt-4-1106-preview",
                                                 label="其他功能使用之api", interactive=True)

@@ -191,7 +191,7 @@ def aggregate_summary(results):
     raw_lines = []
     for result in results:
         if isinstance(result,dict):
-            lines = result['content'].split(os.linesep)
+            lines = result['content'].split('\n')
             items = [line for line in lines if is_numbered_list_member(line)]
             if all([item[:4]=="    " for item in items]):
                 items=[item[4:]for item in items]

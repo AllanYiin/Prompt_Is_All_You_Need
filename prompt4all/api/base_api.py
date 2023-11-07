@@ -412,11 +412,7 @@ class GptBaseApi:
 
                         if this_choice.delta.content is not None:
                             partial_words += this_delta.content
-                            if token_counter == 0:
-                                full_history.append(
-                                    {"role": "assistant", "content": partial_words, "context_type": context_type})
-                            else:
-                                full_history[-1]['content'] = partial_words
+                            full_history[-1]['content'] = partial_words
                             token_counter += 1
                     except Exception as e:
                         finish_reason = '[EXCEPTION]'
@@ -476,21 +472,16 @@ class GptBaseApi:
             completion = self.make_response(self.API_MODEL, message_context, parameters, stream=True)
 
             finish_reason = 'None'
+            full_history.append( {"role": "assistant", "content": partial_words, "context_type": context_type})
             for chunk in completion:
                 try:
-                    this_choice=chunk_message = chunk['choices'][0]
-                    this_delta= this_choice['delta']
-                    finish_reason = this_choice['finish_reason']
-                    if len(this_delta)==0:
-                        finish_reason = '[DONE]'
-                        break
-                    elif 'content' in this_delta:
-                        partial_words +=this_delta['content']
-                        if token_counter == 0:
-                            full_history.append(
-                                {"role": "assistant", "content": partial_words, "context_type": context_type})
-                        else:
-                            full_history[-1]['content'] = partial_words
+                    this_choice=chunk_message = chunk.choices[0]
+                    this_delta= this_choice.delta
+                    finish_reason = this_choice.finish_reason
+
+                    if this_delta.content is not None:
+                        partial_words +=this_delta.content
+                        full_history[-1]['content'] = partial_words
                         token_counter += 1
                 except Exception as e:
                     if len(partial_words) == 0:
@@ -502,27 +493,22 @@ class GptBaseApi:
                         break
                 answer = full_history[-1]['content']
                 yield answer, full_history
-            while finish_reason != 'STOP' and finish_reason != '[EXCEPTION]':
+            while finish_reason != 'stop' and finish_reason != '[EXCEPTION]':
                 # 自動以user角色發出「繼續寫下去」的PROMPT
                 prompt = "繼續"
                 # 調用openai.ChatCompletion.create來生成機器人的回答
                 message_context,context_tokens = self.process_context(prompt, context_type, full_history)
                 completion2 = self.make_response(self.API_MODEL, message_context, parameters, stream=True)
+
                 for chunk in completion2:
                     try:
-                        this_choice = chunk_message = chunk['choices'][0]
-                        this_delta = this_choice['delta']
-                        finish_reason = this_choice['finish_reason']
-                        if len(this_delta) == 0:
-                            finish_reason = '[DONE]'
-                            break
-                        elif 'content' in this_delta:
-                            partial_words += this_delta['content']
-                            if token_counter == 0:
-                                full_history.append(
-                                    {"role": "assistant", "content": partial_words, "context_type": context_type})
-                            else:
-                                full_history[-1]['content'] = partial_words
+                        this_choice = chunk_message = chunk.choices[0]
+                        this_delta = this_choice.delta
+                        finish_reason = this_choice.finish_reason
+
+                        if this_delta.content is not None:
+                            partial_words += this_delta.content
+                            full_history[-1]['content'] = partial_words
                             token_counter += 1
                     except Exception as e:
                         if len(partial_words) == 0:
