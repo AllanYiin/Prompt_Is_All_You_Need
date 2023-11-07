@@ -287,7 +287,7 @@ class GptBaseApi:
         return payload
 
     def make_response(self, model, message_with_context, parameters, stream=True):
-        return openai.ChatCompletion.create(
+        return openai.chat.completions.create(
             model=model,
             messages=message_with_context,
             temperature=parameters.get('temperature'),
@@ -300,7 +300,7 @@ class GptBaseApi:
         )
 
     async def make_async_response(self, model, message_with_context, parameters, stream=False):
-        return await openai.ChatCompletion.acreate(
+        return await openai.openai.chat.completions.acreate(
             model=model,
             messages=message_with_context,
             temperature=parameters.get('temperature'),
@@ -593,26 +593,51 @@ class GptBaseApi:
 
 
 
-    def generate_images(self, input_prompt, shorter_prompt=None, image_size=256):
-        response = openai.Image.create(
-            api_key=os.getenv("OPENAI_API_KEY"),
+    def generate_images(self, input_prompt, shorter_prompt=None, image_size=1024):
+
+        response = openai.images.generate(
+            model="dall-e-3",
             prompt=input_prompt,
-            response_format="b64_json",
-            n=4,
-            size="{0}x{1}".format(image_size, image_size)
+            size="{0}x{1}".format(image_size, image_size),
+            quality="standard",
+            n=1,
         )
+
+        response2 = openai.images.generate(
+            model="dall-e-3",
+            prompt=input_prompt,
+            size="{0}x{1}".format(image_size, image_size),
+            quality="standard",
+            n=1,
+        )
+
+
         images = []
-        for index, image_dict in enumerate(response["data"]):
-            decoded_data = b64decode(image_dict["b64_json"])
+
+
+        image_file = "generate_images/{0}-{1}.png".format(response.created, 0)
+        if shorter_prompt is not None:
+            image_file = "generate_images/{0}-{1}-{2}.png".format(response.created,
+                                                                  replace_special_chars(shorter_prompt), 0)
+        images.append(image_file)
+        img_data = requests.get(response.data[0].url).content
+        with open(image_file, 'wb') as handler:
+            handler.write(img_data)
+
+        image_file = "generate_images/{0}-{1}.png".format(response.created, 1)
+        if shorter_prompt is not None:
+            image_file = "generate_images/{0}-{1}-{2}.png".format(response.created,
+                                                                  replace_special_chars(shorter_prompt), 1)
+        images.append(image_file)
+        img_data = requests.get(response2.data[0].url).content
+        with open(image_file, 'wb') as handler:
+            handler.write(img_data)
+
+
+
             # image_data=cv2.imdecode(np.fromstring(image_data, dtype=np.uint8), cv2.IMREAD_COLOR)
-            image_file = "generate_images/{0}-{1}.png".format(response['created'], index)
-            if shorter_prompt is not None:
-                image_file = "generate_images/{0}-{1}-{2}.png".format(response['created'],
-                                                                      replace_special_chars(shorter_prompt), index)
-            with open(image_file, 'wb') as f:
-                f.write(decoded_data)
-            images.append(pil_image.open(image_file))
-            # pil_image.fromarray(image_data, 'RGB').save(image_file)
+
+
         return images
 
 

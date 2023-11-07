@@ -53,7 +53,7 @@ if "OPENAI_API_KEY" not in os.environ:
     print("OPENAI_API_KEY  is not exists!")
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
-model_lists = openai.Model.list()
+model_lists = openai.models.list()
 
 ##
 initialize_conversation_history()
@@ -143,7 +143,7 @@ def nlu_api(text_input):
 
 def image_api(text_input, image_size, temperature=1.2):
     # 創建與API的對話
-
+    _system_prompt = open("prompts/dalle2.md", encoding="utf-8").read()
     _parameters = copy.deepcopy(baseChatGpt.API_PARAMETERS)
     _parameters['temperature'] = temperature
     _parameters['max_tokens'] = 100
@@ -151,17 +151,17 @@ def image_api(text_input, image_size, temperature=1.2):
     conversation = [
         {
             "role": "system",
-            "content": "你是一個才華洋溢的視覺藝術設計師以及DALL.E-2提示專家，你會根據輸入的視覺需求規劃出具有獨特風格並且吸引人的視覺構圖然後將其轉化成DALL.E2的prompt文字，在這prompt文字中適時的運用至少一種適合主題的視覺風格專有名詞、視覺風格形容詞、畫家或視覺藝術家名字以及各種渲染效果名稱以指導生成圖片的效果。請確保產生的圖像具備高解析度以及高質感以及包含構圖中的視覺細節，只需要回覆我prompt的本體即可，不需要解釋輸入需求文字的意義，prompt內只會保留會出現在影像中的物體以及其他視覺有關的文字描述，prompt本體以\"An image\"開始，你生成的prompt長度絕對不要超過800 characters, 請用英語撰寫"
+            "content": _system_prompt
         },
         {
             "role": "user",
             "content": text_input
         }
     ]
-    image_prompt = baseChatGpt.post_and_get_answer(conversation, _parameters)
+    image_prompt = imageChatGpt.post_and_get_answer(conversation, _parameters)
     if ':' in image_prompt:
         image_prompt = ' '.join(image_prompt.split(':')[1:])
-    images_urls = baseChatGpt.generate_images(image_prompt, text_input, image_size)
+    images_urls = imageChatGpt.generate_images(image_prompt, text_input, image_size)
     return image_prompt, images_urls
 
 
@@ -1037,6 +1037,7 @@ if __name__ == '__main__':
                    theme=adjust_theme()) as demo:
         baseChatGpt = GptBaseApi(model="gpt-3.5-turbo-0613")
         summaryChatGpt = GptBaseApi(model="gpt-3.5-turbo-0613")
+        imageChatGpt = GptBaseApi(model="gpt-4-0613")
         otherChatGpt = GptBaseApi(model="gpt-3.5-turbo-0613")
         state = gr.State([{"role": "system", "content": '所有內容以繁體中文書寫',
                            "estimate_tokens": estimate_used_tokens('所有內容以繁體中文書寫',
@@ -1052,7 +1053,7 @@ if __name__ == '__main__':
                         with gr.TabItem("聊天"):
                             with gr.Column(scale=1):
                                 with gr.Row():
-                                    inputs = gr.Textbox(placeholder="你與語言模型Bert有何不同?",
+                                    inputs = gr.Textbox(placeholder="什麼是LLM?",
                                                         label="輸入文字後按enter", lines=10, max_lines=2000)  # t
                                     context_type = gr.Dropdown(
                                         ["[@PROMPT] 一般指令", "[@GLOBAL] 全局指令", "[@SKIP] 跳脫上文",
@@ -1083,10 +1084,10 @@ if __name__ == '__main__':
                                                                   label="重複性處罰(Frequency Penalty)",
                                                                   info='值域為-2~+2，數值越大，對於重複用字會給予懲罰，數值越負，則鼓勵重複用字')
                         with gr.TabItem("對話紀錄"):
-                            with gr.Row():
-                                with gr.Group():
-                                    conversation_history_delete_btm = gr.Button('刪除', scale=1, size='sm')
-                                    conversation_history_share_btm = gr.Button('分享', scale=1, size='sm')
+                            with gr.Column(elem_id="col_container"):
+                                conversation_history_share_btm = gr.Button('更名', scale=1, size='sm')
+                                conversation_history_delete_btm = gr.Button('刪除', scale=1, size='sm')
+
                             with gr.Row():
                                 history_list = gr.templates.List(value=cxt.conversation_history.titles, height=550,
                                                                  headers=["歷史"], datatype=["str"],
@@ -1110,7 +1111,7 @@ if __name__ == '__main__':
                             nlu_output = gr.Text(label="回傳的JSON視覺化", interactive=True, max_lines=40,
                                                  show_copy_button=True)
                     nlu_button = gr.Button("送出")
-            with gr.TabItem("Dall.E2"):
+            with gr.TabItem("Dall.E3"):
                 with gr.Column(variant="panel"):
                     with gr.Row(variant="compact"):
                         image_text = gr.Textbox(
@@ -1127,7 +1128,7 @@ if __name__ == '__main__':
                 with gr.Accordion("超參數", open=False):
                     temperature2 = gr.Slider(minimum=-0, maximum=2.0, value=0.7, step=0.1, interactive=True,
                                              label="溫度 (Temperature)", )
-                    image_size = gr.Radio([256, 512, 1024], label="圖片尺寸", value=512)
+                    image_size = gr.Radio([1024], label="圖片尺寸", value=1024)
             with gr.TabItem("風格改寫"):
                 with gr.Column(elem_id="col_container"):
                     rewrite_dropdown = gr.Dropdown(
@@ -1331,10 +1332,13 @@ if __name__ == '__main__':
                 with gr.Column():
                     dropdown_api1 = gr.Dropdown(choices=[k for k in model_info.keys()], value="gpt-3.5-turbo-0613",
                                                 label="對話使用之api", interactive=True)
+                    dropdown_api4 = gr.Dropdown(choices=[k for k in model_info.keys()], value="gpt-4-0613",
+                                                label="以文生圖使用之api", interactive=True)
                     dropdown_api2 = gr.Dropdown(choices=[k for k in model_info.keys()], value="gpt-3.5-turbo-0613",
                                                 label="長文本摘要使用之api", interactive=True)
                     dropdown_api3 = gr.Dropdown(choices=[k for k in model_info.keys()], value="gpt-3.5-turbo-0613",
                                                 label="其他功能使用之api", interactive=True)
+
 
         inputs_event = inputs.submit(prompt_api,
                                      [inputs, context_type, top_p, temperature, top_k, frequency_penalty, state],
@@ -1395,12 +1399,8 @@ if __name__ == '__main__':
         def select_conversation(evt: gr.SelectData):
             conversations = cxt.conversation_history.conversations[evt.index[0]].get_prompt_messages(only_final=True)
             cxt.conversation_history.selected_index = evt.index[0]
-            conversations = unpack_singleton(conversations)
-            if isinstance(conversations, dict):
-                conversations = [conversations]
-            conversations = [c for c in conversations if c['role'] != 'system']
-            return [(process_chat(conversations[i]), process_chat(conversations[i + 1])) for i in
-                    range(0, len(conversations) - 1, 2) if conversations[i]['role'] != 'system'], cxt.state
+            chat=cxt.conversation_history.selected_item.get_gradio_chat()
+            return chat,cxt.state
 
 
         history_list.select(select_conversation, None, [chatbot, state])
@@ -1440,6 +1440,7 @@ if __name__ == '__main__':
         dropdown_api1.change(lambda x: baseChatGpt.change_model(x), [dropdown_api1], [])
         dropdown_api2.change(lambda x: summaryChatGpt.change_model(x), [dropdown_api2], [])
         dropdown_api3.change(lambda x: otherChatGpt.change_model(x), [dropdown_api3], [])
+        dropdown_api4.change(lambda x: imageChatGpt.change_model(x), [dropdown_api4], [])
 
         gr.Markdown(description)
 
