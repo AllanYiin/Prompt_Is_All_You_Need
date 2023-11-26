@@ -2,11 +2,14 @@ import json
 import uuid
 import os
 import openai
+from openai import OpenAI
+from openai._types import NotGiven,NOT_GIVEN
 import openai_async
 from datetime import datetime
 import asyncio
 import nest_asyncio
 import threading
+from collections import defaultdict
 nest_asyncio.apply()
 
 import regex
@@ -20,14 +23,14 @@ import PIL.Image as pil_image
 from base64 import b64decode
 import prompt4all.api.context_type as ContextType
 from prompt4all.utils.regex_utils import *
-
+from prompt4all.tools import database_tools
 from prompt4all.utils.chatgpt_utils import process_context, process_chat
 from prompt4all.utils.tokens_utils import num_tokens_from_history, estimate_used_tokens
 #from tiktoken import Tokenizer, TokenizerWrapper
 from typing import List, Dict, TypedDict
 from prompt4all import context
 from prompt4all.context import *
-
+client = OpenAI()
 cxt=context._context()
 
 __all__ = ["model_info", "GptBaseApi"]
@@ -132,17 +135,41 @@ model_info = {
 
 
 class GptBaseApi:
-    def __init__(self, model="gpt-4-1106-preview", temperature=0.5, system_message='所有內容以繁體中文書寫'):
+    def __init__(self, model="gpt-4-1106-preview", temperature=0.5, system_message='#zh-TW 所有內容以繁體中文書寫'):
         self.API_MODEL=None
         self.API_TYPE=None
         self.BASE_URL =None
-        self.MAX_TOKENS = None
+        self.MAX_TOKENS =NOT_GIVEN
         self.API_KEY = os.getenv("OPENAI_API_KEY")
 
         self.change_model(model)
 
 
         self.BASE_IDENTITY = uuid.uuid4()
+        self.functions = NOT_GIVEN
+        self.tools = NOT_GIVEN
+        if cxt.is_db_enable:
+            self.functions = [open("tools/query_sql.json", encoding="utf-8").read()]
+            self.tools = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "query_sql",
+                        "description": "將使用者查詢資料庫或者是取得某個彙總數據的需求轉成T-SQL後直接執行並回傳結果",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "query_intent": {
+                                    "type": "string",
+                                    "description": "使用者查詢資料庫或者是取得某個彙總數據的需求"
+                                }
+                            },
+                            "required": ["query_intent"]
+                        }
+                    },
+                }
+            ]
+
 
 
         self.API_HEADERS = {
@@ -152,7 +179,7 @@ class GptBaseApi:
             "Authorization": f"Bearer {self.API_KEY}"
         }
         self.SYSTEM_MESSAGE = system_message
-        self.API_PARAMETERS = {'top_p': 1, 'temperature': temperature, 'top_k': 1, 'presence_penalty': 0,
+        self.API_PARAMETERS = {'top_p': 1, 'temperature': temperature, 'top_k': 1, 'presence_penalty': 0.5,
                                'frequency_penalty': 0 }
         self.FULL_HISTORY = [{"role": "system", "content": self.SYSTEM_MESSAGE,
                               "estimate_tokens": estimate_used_tokens(self.SYSTEM_MESSAGE, model_name=self.api_model)}]
@@ -290,29 +317,35 @@ class GptBaseApi:
         return payload
 
     def make_response(self, model, message_with_context, parameters, stream=True):
-        return openai.chat.completions.create(
+        return client.chat.completions.create(
             model=model,
             messages=message_with_context,
             temperature=parameters.get('temperature'),
             top_p=parameters.get('top_p'),
-            n=parameters.get('top_k'),
-            max_tokens=parameters.get('max_tokens'),
+            n=parameters.get('top_k',1),
+            max_tokens=parameters.get('max_tokens', NOT_GIVEN),
             presence_penalty=parameters.get('presence_penalty'),
             frequency_penalty=parameters.get('frequency_penalty'),
-            stream=stream  # again, we set stream=True
+            stream=stream,
+            tools=self.tools,
+            tool_choice="auto"
+
         )
 
     async def make_async_response(self, model, message_with_context, parameters, stream=False):
-        return await openai.openai.chat.completions.acreate(
+        self.functions = functions
+        return await client.chat.completions.acreate(
             model=model,
             messages=message_with_context,
             temperature=parameters.get('temperature'),
             top_p=parameters.get('top_p'),
-            n=parameters.get('top_k'),
-            max_tokens=int(parameters.get('max_tokens')),
+            n=parameters.get('top_k',1),
+            max_tokens=int(parameters.get('max_tokens'),NotGiven()),
             presence_penalty=parameters.get('presence_penalty'),
             frequency_penalty=parameters.get('frequency_penalty'),
-            stream=stream  # again, we set stream=True
+            stream=stream,
+            tools=self.tools,
+            tool_choice="auto"
         )
 
     def post_a_streaming_chat(self, input_prompt, context_type, parameters, full_history):
@@ -339,6 +372,7 @@ class GptBaseApi:
         elif input_prompt and len(full_history)>=3 and full_history[-1]['role']=='assistant' and full_history[-2]['role']=='user' and full_history[-2]['content']=='input_prompt':
             pass
         elif input_prompt:
+            status_word='...執行中'
             # 調用openai.ChatCompletion.create來生成機器人的回答
             estimate_tokens = estimate_used_tokens(input_prompt) + estimate_used_tokens('user',
                                                                                         model_name=self.API_MODEL) + 4
@@ -348,9 +382,17 @@ class GptBaseApi:
             #payload = self.parameters2payload(self.API_MODEL, message_context,parameters)
             full_history.append({"role": "user", "content": input_prompt, "context_type": context_type,
                                  "estimate_tokens": estimate_tokens})
+            status_word = '執行中...'
+
             completion =self.make_response(self.api_model,message_context,parameters,stream=True)
+            fake_full_history=copy.deepcopy(full_history)
+            fake_full_history.append({"role": "assistant", "content": status_word, "context_type": context_type})
+            chat = [(process_chat(fake_full_history[i]), process_chat(fake_full_history[i + 1])) for i in
+                    range(1, len(fake_full_history) - 1, 2) if fake_full_history[i]['role'] != 'system']
 
+            yield chat, status_word, full_history
 
+            tool_calls = []
             finish_reason = 'None'
             try:
                 full_history.append({"role": "assistant", "content": partial_words, "context_type": context_type})
@@ -359,15 +401,54 @@ class GptBaseApi:
                         this_choice = chunk_message = chunk.choices[0]
                         this_delta = this_choice.delta
                         finish_reason = this_choice.finish_reason
-
-
-                        if this_choice.delta.content is not None:
+                        if not this_delta:
+                            break
+                        elif this_delta and this_delta.content:
                             partial_words += this_delta.content
-
-
-                            full_history[-1]['content'] = partial_words
-
+                            full_history[-1]['content'] = status_word if len(partial_words)<5 else partial_words
                             token_counter += 1
+
+                        if not this_delta.function_call and not this_delta.tool_calls:
+                            if start:
+                                continue
+                            else:
+                                break
+                        start = False
+                        if this_delta.function_call:
+                            if index == len(tool_calls):
+                                tool_calls.append({})
+                            if delta.function_call.name:
+                                tool_calls[index]['function']['name'] = delta.function_call.name
+                                tool_calls[index]['function']['arguments']=''
+                                status_word="解析查詢需求..."
+                                full_history[-1]['content'] = status_word if len(partial_words) < 5 else partial_words
+                            if delta.function_call.arguments:
+                                tool_calls[index]['function']['arguments'] += (
+                                    delta.function_call.arguments)
+                        elif this_delta.tool_calls:
+                            tool_call = this_delta.tool_calls[0]
+                            index = tool_call.index
+                            if index == len(tool_calls):
+                                tool_calls.append({})
+                            if tool_call.id:
+                                tool_calls[index]['id'] = tool_call.id
+                                tool_calls[index]['type']= 'function'
+                            if tool_call.function:
+                                if 'function' not in tool_calls[index]:
+                                    tool_calls[index]['function'] = {}
+                                if tool_call.function.name:
+                                    tool_calls[index]['function']['name'] = tool_call.function.name
+                                    tool_calls[index]['function']['arguments']=''
+                                    status_word = "解析查詢需求..."
+                                    full_history[-1]['content'] = status_word if len(partial_words) < 5 else partial_words
+                                if tool_call.function.arguments:
+                                    tool_calls[index]['function']['arguments'] += (
+                                        tool_call.function.arguments)
+                        chat = [(process_chat(full_history[i]), process_chat(full_history[i + 1])) for i in
+                                range(1, len(full_history) - 1, 2) if full_history[i]['role'] != 'system']
+                        answer = full_history[-1]['content']
+                        yield chat, answer, full_history
+
                         if finish_reason == 'stop':
                             break
 
@@ -429,20 +510,84 @@ class GptBaseApi:
 
             # 檢查接續後的完整回覆是否過長
             # print('bot_output: ',len(bot_output))
+
+
+            if tool_calls:
+                # Step 3: call the function
+                # Note: the JSON response may not always be valid; be sure to handle errors
+                available_functions = {
+                    "query_sql": database_tools.query_sql,
+                }  # only one function in this example, but you can have multiple
+
+                #message_context.append({"role": "assistant", "content":  full_history[-1]['content'], 'tool_calls':tool_calls})
+                status_word = "生成SQL語法..."
+                full_history[-1]['content'] = status_word
+                chat = [(process_chat(full_history[i]), process_chat(full_history[i + 1])) for i in
+                        range(1, len(full_history) - 1, 2) if full_history[i]['role'] != 'system']
+                answer = full_history[-1]['content']
+                yield chat, answer, full_history
+                for tool_call in tool_calls:
+                    function_name = tool_call['function']['name']
+
+                    function_to_call = available_functions[function_name]
+                    function_args = json.loads(tool_call['function']['arguments'])
+
+                    function_response = function_to_call(
+                        query_intent=function_args.get("query_intent")
+                    )
+
+                    status_word = "執行資料庫查詢..."
+                    full_history[-1]['content'] = status_word
+                    chat = [(process_chat(full_history[i]), process_chat(full_history[i + 1])) for i in
+                            range(1, len(full_history) - 1, 2) if full_history[i]['role'] != 'system']
+                    answer = full_history[-1]['content']
+                    yield chat, answer, full_history
+                    # message_context.append(
+                    #     {
+                    #         "tool_call_id": tool_call['id'],
+                    #         "role": "tool",
+                    #         "name": function_name,
+                    #         "content": eval(function_response),
+                    #     }
+                    # )
+                    #full_history.append(message_context[-1])
+                    if message_context[-1]['content'] is None:
+                        message_context[-1]['content']=''
+                    message_context[-1]['content']+='\n'+function_response
+                    second_response = client.chat.completions.create(
+                        model=self.api_model,
+                        messages=message_context,
+                        stream=True)
+                    for second_chunk in second_response:
+
+                        this_second_choice = chunk_message = second_chunk.choices[0]
+                        this_second_delta = this_second_choice.delta
+                        finish_reason = this_second_choice.finish_reason
+                        if not this_second_delta:
+                            break
+                        elif this_second_delta and this_second_delta.content:
+                            partial_words += this_second_delta.content
+                            full_history[-1]['content'] = partial_words
+                            token_counter += 1
+                            chat = [(process_chat(full_history[i]), process_chat(full_history[i + 1])) for i in
+                                    range(1, len(full_history) - 1, 2) if full_history[i]['role'] != 'system']
+                            answer = full_history[-1]['content']
+
+                            yield chat, answer, full_history
             full_history[-1]["estimate_tokens"] = estimate_used_tokens(partial_words,
                                                                        model_name=self.API_MODEL) + estimate_used_tokens(
                 'assistant', model_name=self.API_MODEL) + 4
             chat = [(process_chat(full_history[i]), process_chat(full_history[i + 1])) for i in
-                    range(1, len(full_history) - 1, 2) if full_history[i]['role'] != 'system']
+                    range(1, len(full_history) - 1, 2) if full_history[i]['role'] in ['user','assistant']]
             answer = full_history[-1]['content']
 
             yield chat, answer, full_history
 
-            if len(partial_words) > 200:
-
-                summarization_text =self.summarize_text(partial_words,60)
-                full_history[-1]['summary'] = summarization_text
-                full_history[-1]['summary_tokens'] = estimate_used_tokens(summarization_text,model_name=self.API_MODEL) + estimate_used_tokens('assistant',model_name=self.API_MODEL) + 4
+            # if len(partial_words) > 200:
+            #
+            #     summarization_text =self.summarize_text(partial_words,60)
+            #     full_history[-1]['summary'] = summarization_text
+            #     full_history[-1]['summary_tokens'] = estimate_used_tokens(summarization_text,model_name=self.API_MODEL) + estimate_used_tokens('assistant',model_name=self.API_MODEL) + 4
 
             full_history[-1]["estimate_tokens"] = estimate_used_tokens(partial_words,
                                                                        model_name=self.API_MODEL) + estimate_used_tokens(
@@ -628,6 +773,14 @@ class GptBaseApi:
 
         return images
 
+    def get_embedding(self,text):
+        text = text.replace("\n", " ")
+        response = client.embeddings.create(
+            model="text-embedding-ada-002",
+            input=text,
+            encoding_format="float"
+        )
+        return response.data[0].embedding
 
     def save_history(self, filename=None):
         history_json = json.dumps(self.FULL_HISTORY, ensure_ascii=False, indent=4)

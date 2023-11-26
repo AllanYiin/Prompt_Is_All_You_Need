@@ -42,7 +42,7 @@ from prompt4all.common import *
 from prompt4all import context
 from prompt4all.context import *
 from prompt4all.common import find_available_port
-
+os.chdir(os.path.dirname(__file__))
 cxt = context._context()
 os.environ['no_proxy'] = '*'
 
@@ -1337,6 +1337,7 @@ if __name__ == '__main__':
                             rolling_history_viewer = gr.JSON(elem_id='rolling_history_viewer')
             with gr.TabItem("設定"):
                 with gr.Column():
+
                     dropdown_api1 = gr.Dropdown(choices=[k for k in model_info.keys()], value="gpt-4-1106-preview",
                                                 label="對話使用之api", interactive=True)
                     dropdown_api4 = gr.Dropdown(choices=[k for k in model_info.keys()], value="gpt-4-1106-preview",
@@ -1345,6 +1346,12 @@ if __name__ == '__main__':
                                                 label="長文本摘要使用之api", interactive=True)
                     dropdown_api3 = gr.Dropdown(choices=[k for k in model_info.keys()], value="gpt-4-1106-preview",
                                                 label="其他功能使用之api", interactive=True)
+                    gr.Group(dropdown_api1,dropdown_api4,dropdown_api2,dropdown_api3)
+                    cb_db_enable=gr.Checkbox(value=cxt.is_db_enable,label="是否啟用資料庫查詢")
+                    text_conn=gr.Textbox(interactive=cb_db_enable.value,value=cxt.conn_string,label="連線字串")
+                    text_db_schema=gr.TextArea(interactive=cb_db_enable.value,value=cxt.databse_schema,label="資料庫Schema")
+                    gr.Group(cb_db_enable,text_conn,text_db_schema)
+
 
 
         inputs_event = inputs.submit(prompt_api,

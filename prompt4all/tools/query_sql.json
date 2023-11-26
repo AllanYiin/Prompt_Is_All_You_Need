@@ -1,0 +1,14 @@
+{
+  "name": "query_sql",
+  "description": "將使用者查詢資料庫或者是取得某個彙總數據的需求轉成T-SQL後直接執行並回傳結果",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "query_intent": {
+        "type": "string",
+        "description": "使用者查詢資料庫或者是取得某個彙總數據的需求"
+      }
+    },
+    "required": ["query_intent"]
+  }
+}

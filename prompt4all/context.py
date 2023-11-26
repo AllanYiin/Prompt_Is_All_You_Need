@@ -172,7 +172,25 @@ class _Context:
         self._context_handle = OrderedDict()
         self._errors_config= OrderedDict()
         self.whisper_model=None
+        self._module_dict = dict()
+        self.prompt4all_dir = self.get_prompt4all_dir()
+        self.backend =None
+        self.conversation_history=None
+        self.print=partial(print,flush=True)
+        self.locale = locale.getdefaultlocale()[0].lower()
+        if 'PROMPT4ALL_WORKING_DIR' in os.environ:
+            self.working_directory = os.environ['PROMPT4ALL_WORKING_DIR']
+            os.chdir(os.environ['PROMPT4ALL_WORKING_DIR'])
+        else:
+            self.working_directory = os.getcwd()
+        self.plateform = self.get_plateform()
+        self.numpy_print_format = '{0:.4e}'
+        np.set_printoptions(formatter={'float_kind': lambda x: self.numpy_print_format.format(x)},precision=4,suppress=True)
+        self.is_db_enable=True
+        self.conn_string='mssql+pyodbc://@' + 'localhost' + '/' + 'AdventureWorksDW2022' + '?trusted_connection=yes&driver=ODBC+Driver+17+for+SQL+Server'
+        self.databse_schema= open("examples/schema.sql", encoding="utf-8").read()
         self.initial_context()
+
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
@@ -231,18 +249,8 @@ class _Context:
             return plateform_str
 
     def initial_context(self):
-        self._module_dict = dict()
-        self.prompt4all_dir = self.get_prompt4all_dir()
-        self.backend =None
-        self.conversation_history=None
-        self.print=partial(print,flush=True)
+
         site_packages=get_sitepackages()
-
-        self.locale = locale.getdefaultlocale()[0].lower()
-
-        self.working_directory = os.getcwd()
-        self.plateform = self.get_plateform()
-        self.numpy_print_format = '{0:.4e}'
 
         _config_path = os.path.expanduser(os.path.join(self.prompt4all_dir, 'prompt4all.json'))
         _config = {}
@@ -261,11 +269,8 @@ class _Context:
                             print(e)
             except ValueError as ve:
                 print(ve)
-        if 'PROMPT4ALL_WORKING_DIR' in os.environ:
-            self.working_directory = os.environ['PROMPT4ALL_WORKING_DIR']
-            os.chdir(os.environ['PROMPT4ALL_WORKING_DIR'])
-        np.set_printoptions(formatter={'float_kind': lambda x: self.numpy_print_format.format(x)},precision=4,suppress=True)
-        self.device = None
+
+
 
     def __getattribute__(self, attr):
         value = object.__getattribute__(self, attr)
