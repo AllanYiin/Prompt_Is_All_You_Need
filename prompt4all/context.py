@@ -186,9 +186,10 @@ class _Context:
         self.plateform = self.get_plateform()
         self.numpy_print_format = '{0:.4e}'
         np.set_printoptions(formatter={'float_kind': lambda x: self.numpy_print_format.format(x)},precision=4,suppress=True)
-        self.is_db_enable=True
+        self.is_db_enable=False
+
         self.conn_string='mssql+pyodbc://@' + 'localhost' + '/' + 'AdventureWorksDW2022' + '?trusted_connection=yes&driver=ODBC+Driver+17+for+SQL+Server'
-        self.databse_schema= open("examples/schema.sql", encoding="utf-8").read()
+        self.databse_schema= open("examples/query_database/schema.sql", encoding="utf-8").read()
         self.initial_context()
 
 
