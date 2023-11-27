@@ -2,7 +2,7 @@
 import regex
 
 __all__ = [
-    "choice_pattern","delta_pattern","json_pattern",'numbered_list_member_pattern','unordered_listitem_pattern',"replace_special_chars",'extract_score','triplequote_pattern','is_numbered_list_member','is_unordered_list_member','extract_numbered_list_member']
+    "choice_pattern","delta_pattern","json_pattern",'numbered_list_member_pattern','unordered_listitem_pattern',"replace_special_chars",'extract_score','extract_code','triplequote_pattern','is_numbered_list_member','is_unordered_list_member','extract_numbered_list_member']
 choice_pattern =regex.compile(r'"choices":\s*\[(\{.*?\})\]')
 
 delta_pattern = regex.compile(r'"delta":\s*{"content":"([^"]*)"}')
@@ -14,7 +14,7 @@ triplequote_pattern=regex.compile(r"```(.*)```")
 unordered_listitem_pattern=regex.compile(r"\s*([-*+])\s+(.*)$")
 numbered_list_member_pattern=regex.compile(r'\s*(\d+(\.\d+)*\.?)(?=\s)')
 
-
+code_pattern=regex.compile(r'```(.*?)```')
 
 def replace_special_chars(input_str):
     # 匹配除了英文、數字、漢字以外的字符
@@ -33,6 +33,18 @@ def extract_score(text):
         return int(result.group(1))
     else:
         return None
+
+def extract_code(text):
+    """
+    從給定的文本中提取代碼區塊。
+
+    :param text: 包含代碼區塊的字符串。
+    :return: 包含所有代碼區塊的列表。
+    """
+    code_blocks = regex.findall(r'```(.*?)```', text, regex.DOTALL)[0][4:]
+    return code_blocks
+
+
 
 def is_numbered_list_member(string):
     return bool(regex.match(numbered_list_member_pattern, string))
