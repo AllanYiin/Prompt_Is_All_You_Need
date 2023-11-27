@@ -148,29 +148,29 @@ class GptBaseApi:
         self.BASE_IDENTITY = uuid.uuid4()
         self.functions = NOT_GIVEN
         self.tools = NOT_GIVEN
-        if cxt.is_db_enable:
-            self.functions = [open("tools/query_sql.json", encoding="utf-8").read()]
-            self.tools = [
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "query_sql",
-                        "description": "將使用者查詢資料庫或者是取得某個彙總數據的需求轉成T-SQL後直接執行並回傳結果",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "query_intent": {
-                                    "type": "string",
-                                    "description": "使用者查詢資料庫或者是取得某個彙總數據的需求"
-                                }
-                            },
-                            "required": ["query_intent"]
-                        }
-                    },
-                }
-            ]
+        # if cxt.is_db_enable:
+        #     self.functions = [open("tools/query_sql.json", encoding="utf-8").read()]
+        #     self.tools = [
+        #         {
+        #             "type": "function",
+        #             "function": {
+        #                 "name": "query_sql",
+        #                 "description": "將使用者查詢資料庫或者是取得某個彙總數據的需求轉成T-SQL後直接執行並回傳結果",
+        #                 "parameters": {
+        #                     "type": "object",
+        #                     "properties": {
+        #                         "query_intent": {
+        #                             "type": "string",
+        #                             "description": "使用者查詢資料庫或者是取得某個彙總數據的需求"
+        #                         }
+        #                     },
+        #                     "required": ["query_intent"]
+        #                 }
+        #             },
+        #         }
+        #     ]
 
-
+        self.enable_database_query(cxt.is_db_enable)
 
         self.API_HEADERS = {
             'Accept': 'text/event-stream',
@@ -218,6 +218,32 @@ class GptBaseApi:
             self.BASE_URL = model_info[model]["endpoint"]
             self.MAX_TOKENS = model_info[model]["max_token"]
             self.API_KEY = os.getenv("OPENAI_API_KEY")
+        self.enable_database_query(cxt.is_db_enable)
+
+    def enable_database_query(self, is_enable:bool):
+        self.functions = NOT_GIVEN
+        self.tools = NOT_GIVEN
+        if is_enable:
+            self.functions = [open("tools/query_sql.json", encoding="utf-8").read()]
+            self.tools = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "query_sql",
+                        "description": "將使用者查詢資料庫或者是取得某個彙總數據的需求轉成T-SQL後直接執行並回傳結果",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "query_intent": {
+                                    "type": "string",
+                                    "description": "使用者查詢資料庫或者是取得某個彙總數據的需求"
+                                }
+                            },
+                            "required": ["query_intent"]
+                        }
+                    },
+                }
+            ]
 
     def build_message(self, role, content):
         """
@@ -328,7 +354,7 @@ class GptBaseApi:
             frequency_penalty=parameters.get('frequency_penalty'),
             stream=stream,
             tools=self.tools,
-            tool_choice="auto"
+            tool_choice=NOT_GIVEN if self.tools==NOT_GIVEN else "auto"
 
         )
 
@@ -345,7 +371,7 @@ class GptBaseApi:
             frequency_penalty=parameters.get('frequency_penalty'),
             stream=stream,
             tools=self.tools,
-            tool_choice="auto"
+            tool_choice=NOT_GIVEN if self.tools==NOT_GIVEN else "auto"
         )
 
     def post_a_streaming_chat(self, input_prompt, context_type, parameters, full_history):
@@ -393,6 +419,7 @@ class GptBaseApi:
             yield chat, status_word, full_history
 
             tool_calls = []
+            start = True
             finish_reason = 'None'
             try:
                 full_history.append({"role": "assistant", "content": partial_words, "context_type": context_type})
@@ -536,6 +563,10 @@ class GptBaseApi:
                         query_intent=function_args.get("query_intent")
                     )
 
+
+                    message_context.append({'role': 'assistant', 'content': None,'tool_calls': tool_calls})
+                    message_context.append({"role": "tool", "tool_call_id": tool_call['id'],"name": tool_call["function"]["name"],"content": function_response})
+
                     status_word = "執行資料庫查詢..."
                     full_history[-1]['content'] = status_word
                     chat = [(process_chat(full_history[i]), process_chat(full_history[i + 1])) for i in
@@ -551,9 +582,9 @@ class GptBaseApi:
                     #     }
                     # )
                     #full_history.append(message_context[-1])
-                    if message_context[-1]['content'] is None:
-                        message_context[-1]['content']=''
-                    message_context[-1]['content']+='\n'+function_response
+                    # if message_context[-1]['content'] is None:
+                    #     message_context[-1]['content']=''
+                    # message_context[-1]['content']+='\n'+function_response
                     second_response = client.chat.completions.create(
                         model=self.api_model,
                         messages=message_context,
