@@ -10,7 +10,7 @@ CREATE TABLE DimCustomer(
     -- 其他字段
 );
 
--- DimDate 表
+-- DimDate 表 日期
 CREATE TABLE DimDate(
     DateKey INT PRIMARY KEY,
     FullDateAlternateKey DATE,
@@ -20,7 +20,7 @@ CREATE TABLE DimDate(
     -- 其他字段
 );
 
--- DimGeography 表
+-- DimGeography 表 國家城市
 CREATE TABLE DimGeography(
     GeographyKey INT PRIMARY KEY,
     City NVARCHAR(30),
@@ -28,7 +28,7 @@ CREATE TABLE DimGeography(
     -- 其他字段
 );
 
--- DimProduct 表
+-- DimProduct 表 產品SKU
 CREATE TABLE DimProduct(
     ProductKey INT PRIMARY KEY,
     ProductSubcategoryKey INT,
@@ -38,14 +38,14 @@ CREATE TABLE DimProduct(
     -- 其他字段
 );
 
--- DimProductCategory 表
+-- DimProductCategory 表 產品大分類
 CREATE TABLE DimProductCategory(
     ProductCategoryKey INT PRIMARY KEY,
     EnglishProductCategoryName NVARCHAR(50),
     -- 其他字段
 );
 
--- DimProductSubcategory 表
+-- DimProductSubcategory 表 產品中分類
 CREATE TABLE DimProductSubcategory(
     ProductSubcategoryKey INT PRIMARY KEY,
     ProductCategoryKey INT,
@@ -53,7 +53,7 @@ CREATE TABLE DimProductSubcategory(
     -- 其他字段
 );
 
--- DimReseller 表
+-- DimReseller 表 零售商
 CREATE TABLE DimReseller(
     ResellerKey INT PRIMARY KEY,
     GeographyKey INT,
@@ -62,14 +62,9 @@ CREATE TABLE DimReseller(
     -- 其他字段
 );
 
--- DimSalesTerritory 表
-CREATE TABLE DimSalesTerritory(
-    SalesTerritoryKey INT PRIMARY KEY,
-    SalesTerritoryRegion NVARCHAR(50),
-    -- 其他字段
-);
 
--- FactResellerSales 表
+
+-- FactResellerSales 表 零售商銷售事實
 CREATE TABLE FactResellerSales(
     SalesOrderNumber NVARCHAR(20) PRIMARY KEY,
     ProductKey INT,
