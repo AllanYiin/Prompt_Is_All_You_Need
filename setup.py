@@ -25,14 +25,14 @@ with pathlib.Path('requirements.txt').open() as requirements_txt:
         in pkg_resources.parse_requirements(requirements_txt)
     ]
 
-if not os.path.exists('generate_images'):
-    os.mkdir('generate_images')
-if not os.path.exists('generate_text'):
-    os.mkdir('generate_text')
+if not os.path.exists('prompt4all/generate_images'):
+    os.mkdir('prompt4all/generate_images')
+if not os.path.exists('prompt4all/generate_text'):
+    os.mkdir('prompt4all/generate_text')
 
 
 setup(name=NAME,
-      version='0.0.6',
+      version='0.0.7',
       description='Prompt is all you need',
       # long_description=long_description,
       # long_description_content_type="text/markdown",
@@ -66,7 +66,10 @@ setup(name=NAME,
       python_requires='>=3.7',
       keywords=['chatgpt', 'gpt4'],
       packages= find_packages(exclude= ["whisper",".idea","audio","generate_interviews"]),
-      include_package_data=False,
+      package_data={
+          'prompt4all': ['prompts/*.md', 'images/*.*g', 'examples/*.*', 'tools/*.json','tools/tool_icons/*.png','examples/*/*.md','examples/*/*.sql'],
+      },
+      include_package_data=True,
       scripts=[],
 
       )
