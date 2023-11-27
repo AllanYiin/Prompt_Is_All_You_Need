@@ -1,0 +1,14 @@
+{
+  "name": "code_interpreter",
+  "description": "執行python代碼並將執行結果回傳",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "code": {
+        "type": "string",
+        "description": "為解決用戶所提出的任務或問題所生成之python代碼"
+      }
+    },
+    "required": ["code"]
+  }
+}

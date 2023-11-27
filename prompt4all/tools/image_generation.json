@@ -1,0 +1,14 @@
+{
+  "name": "image_generation",
+  "description": "基於使用者生成影像或是圖片的需求將它轉送至Dall.E3生成。",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "image_spec": {
+        "type": "string",
+        "description": "使用者想要生成圖像的需求"
+      }
+    },
+    "required": ["image_spec"]
+  }
+}

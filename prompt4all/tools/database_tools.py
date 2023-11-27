@@ -13,7 +13,7 @@ engine =create_engine(cxt.conn_string)
 
 def query_sql(query_intent:str):
 
-    query_prompt='基於以下資料結構，請為我撰寫可以查詢出"{0}"的sql語法，盡量避免CTE，請善用子查詢以及WHERE條件式來篩選案例以提升計算效率，注意別犯除以零的錯誤以及別在排序時重複引用同個欄位，直接輸出，無須解釋。\n"""\n{1}\n"""\n'.format(query_intent,cxt.databse_schema)
+    query_prompt='#zh-TW 基於以下資料結構，請為我撰寫可以回答"{0}"的sql語法，在語法中用來排序、篩選所用到的量值或欄位，或是計算某個量值所用到的分子與分母，請在你的SQL語法中盡量保留，盡量避免CTE，請善用子查詢以及WHERE條件式來篩選案例以提升計算效率，注意別犯除以零的錯誤以及別在排序時重複引用同個欄位，直接輸出，無須解釋。\n"""\n{1}\n"""\n'.format(query_intent,cxt.databse_schema)
     is_success=False
     this_query_prompt = query_prompt
     retry=0
@@ -24,9 +24,9 @@ def query_sql(query_intent:str):
             messages=[
             {'role': 'user', 'content':this_query_prompt}
             ],
-            temperature=0.1,
+            temperature=0.3,
             n=1,
-            presence_penalty=1,
+            presence_penalty=0,
             stream=False
         )
         response_message = response.choices[0].message
@@ -37,7 +37,7 @@ def query_sql(query_intent:str):
                     df = pd.DataFrame(conn.execute(sqlalchemy.text(tsql).execution_options(autocommit=True)))
                 is_success=True
                 save_query_cache(query_intent,tsql)
-                return r'"""\n#Database query results\n\n##tsql\n\n{0}\n\n##queryresults\n\n{1}\n\n"""'.format(tsql,df.to_string(index=False))
+                return r'"""\n#資料庫查詢答案\n\n##使用的t-sql\n\n{0}\n\n##查詢獲得的數據\n\n{1}\n\n"""'.format(tsql,df.to_string(index=False))
             else:
                 raise RuntimeError('Get No SQL')
         except Exception as e:
