@@ -35,6 +35,7 @@ from prompt4all.api.message import *
 from prompt4all.utils.tokens_utils import *
 from prompt4all.utils.summary_utils import *
 from prompt4all.utils.pdf_utils import *
+from prompt4all.utils.io_utils import process_file
 from prompt4all.theme import adjust_theme, advanced_css
 from prompt4all.utils.whisper_utils import *
 from prompt4all.common import *
@@ -42,6 +43,8 @@ from prompt4all.common import *
 from prompt4all import context
 from prompt4all.context import *
 from prompt4all.common import find_available_port
+from prompt4all.ui import settings_ui
+from prompt4all.ui import rewrite_ui
 os.chdir(os.path.dirname(__file__))
 cxt = context._context()
 os.environ['no_proxy'] = '*'
@@ -165,33 +168,7 @@ def image_api(text_input, image_size, temperature=1.2):
     return image_prompt, images_urls
 
 
-def rewrite_api(text_input, style_name):
-    # 創建與API的對話
 
-    style_name = style_name.split('(')[0].strip()
-    _parameters = copy.deepcopy(baseChatGpt.API_PARAMETERS)
-    _parameters['temperature'] = 1.2
-    _parameters['frequency_penalty'] = 0
-    _parameters['presence_penalty'] = 0
-    results = []
-    conversation = [
-        {
-            "role": "system",
-            "content": "#zh-TW 你是一個寫作高手，你擅長使用{0}的語氣來改寫輸入之文字，並依照語氣風格特性適時加入表情符號、emoji與調整文字排版，無須解釋，直接改寫".format(
-                style_name)
-        },
-        {
-            "role": "user",
-            "content": text_input
-        }
-    ]
-    streaming_answer = baseChatGpt.post_and_get_streaming_answer(conversation, _parameters, conversation)
-    while True:
-        try:
-            answer, full_history = next(streaming_answer)
-            yield answer
-        except StopIteration:
-            break
 
 
 async def summarize_text(text_input, system_prompt):
@@ -926,23 +903,6 @@ def SpeechToText(audio, need_timestamp=False, state=None):
     return (language, result.text)
 
 
-def process_file(file, state):
-    if file is None:
-        return '', state
-    else:
-        folder, filename, ext = context.split_path(file.name)
-        if file.name.lower().endswith('.pdf'):
-            doc_map = get_document_text(file.name)
-            return_text = ''
-            for pg, offset, text in doc_map:
-                return_text += text + '\n'
-                return_text += 'page {0}'.format(pg + 1) + '\n''\n'
-            yield return_text, state
-        else:
-            with open(file.name, encoding="utf-8") as f:
-                content = f.read()
-                print(content)
-            yield content, state
 
 
 def process_audio_file(file, state, initial_prompt, need_timestamp=False):
@@ -1049,6 +1009,10 @@ if __name__ == '__main__':
         state = gr.State([{"role": "system", "content": '所有內容以繁體中文書寫',
                            "estimate_tokens": estimate_used_tokens('所有內容以繁體中文書寫',
                                                                    model_name=baseChatGpt.API_MODEL)}])  # s
+        cxt.baseChatGpt=baseChatGpt
+        cxt.summaryChatGpt=summaryChatGpt
+        cxt.imageChatGpt=imageChatGpt
+        cxt.otherChatGpt=otherChatGpt
         cxt.state = state
         baseChatGpt.FULL_HISTORY = state.value
         gr.HTML(title)
@@ -1137,136 +1101,7 @@ if __name__ == '__main__':
                                              label="溫度 (Temperature)", )
                     image_size = gr.Radio([1024], label="圖片尺寸", value=1024)
             with gr.TabItem("風格改寫"):
-                with gr.Column(elem_id="col_container"):
-                    rewrite_dropdown = gr.Dropdown(
-                        ["抽象 (Abstract)",
-                         "冒險 (Adventurous)",
-                         "比喻體 (Allegorical)",
-                         "曖昧 (Ambiguous)",
-                         "擬人化 (Anthropomorphic)",
-                         "對比 (Antithetical)",
-                         "領悟 (Aphoristic)",
-                         "思辯 (Argumentative)",
-                         "聲音式 (Auditory)",
-                         "喚醒 (Awakening)",
-                         "無邊際 (Boundless)",
-                         "突破 (Breakthrough)",
-                         "古典 (Classical)",
-                         "口語 (Colloquial)",
-                         "逆袭 (Comeback)",
-                         "喜劇 (Comedic)",
-                         "舒適 (Comforting)",
-                         "簡潔 (Concise)",
-                         "自信 (Confident)",
-                         "體悟 (Contemplative)",
-                         "反向思考 (Counterintuitive)",
-                         "勇敢 (Courageous)",
-                         "創意無限 (Creative)",
-                         "深奧 (Cryptic)",
-                         "可愛 (Cute)",
-                         "飛舞 (Dancing)",
-                         "燦爛 (Dazzling)",
-                         "細緻 (Delicate)",
-                         "描繪 (Descriptive)",
-                         "冷漠 (Detached)",
-                         "保持距離 (Distant)",
-                         "夢幻 (Dreamy)",
-                         "優雅 (Elegant)",
-                         "感性 (Emotional)",
-                         "迷人 (Enchanting)",
-                         "無盡 (Endless)",
-                         "隱喻 (Euphemistic)",
-                         "精緻 (Exquisite)",
-                         "充滿信念 (Faithful)",
-                         "無畏 (Fearless)",
-                         "無懈可擊 (Flawless)",
-                         "靈活 (Flexible)",
-                         "正式 (Formal)",
-                         "自由 (Free Verse)",
-                         "未來主義 (Futuristic)",
-                         "天賦異禀 (Gifted)",
-                         "壯麗 (Grandiose)",
-                         "溫馨 (Heartwarming)",
-                         "豪邁 (Heroic)",
-                         "幽默 (Humorous)",
-                         "誇張 (Hyperbolic)",
-                         "個性化 (Idiomatic)",
-                         "獨立 (Independent)",
-                         "強烈 (Intense)",
-                         "問答 (Interrogative)",
-                         "疑問 (Interrogative)",
-                         "道出内心 (Introspective)",
-                         "反諷 (Ironic)",
-                         "歡樂 (Joyful)",
-                         "傳奇 (Legendary)",
-                         "人生哲理 (Life Wisdom)",
-                         "抒情 (Lyric)",
-                         "魔幻 (Magical)",
-                         "隱喻 (Metonymic)",
-                         "現代 (Modern)",
-                         "神秘 (Mysterious)",
-                         "敘事 (Narrative)",
-                         "自然主義 (Naturalistic)",
-                         "高貴 (Noble)",
-                         "懷舊 (Nostalgic)",
-                         "客觀 (Objective)",
-                         "原聲 (Onomatopoeic)",
-                         "充滿激情 (Passionate)",
-                         "激情 (Passionate)",
-                         "個人 (Personal)",
-                         "哲學 (Philosophical)",
-                         "淺白 (Plain)",
-                         "俏皮 (Playful)",
-                         "詩意 (Poetic)",
-                         "正能量 (Positive)",
-                         "實用主義 (Pragmatic)",
-                         "頌揚 (Praising)",
-                         "亮麗 (Radiant)",
-                         "叛逆 (Rebellious)",
-                         "高雅 (Refined)",
-                         "文藝復興 (Renaissance)",
-                         "復古 (Retro)",
-                         "啟示 (Revelatory)",
-                         "革命 (Revolutionary)",
-                         "修辭 (Rhetorical)",
-                         "諷刺 (Satirical)",
-                         "科幻 (Science Fiction)",
-                         "魅惑 (Seductive)",
-                         "聳人聽聞 (Sensational)",
-                         "感傷 (Sentimental)",
-                         "銳利 (Sharp)",
-                         "疑問 (Skeptical)",
-                         "社會評論 (Social Commentary)",
-                         "嚴肅 (Solemn)",
-                         "心靈 (Soulful)",
-                         "靈性 (Spiritual)",
-                         "主觀 (Subjective)",
-                         "奇幻 (Surreal)",
-                         "懸疑 (Suspenseful)",
-                         "象徵 (Symbolic)",
-                         "道家 (Taoist)",
-                         "格調 (Tone)",
-                         "傳統 (Traditional)",
-                         "超凡脫俗 (Transcendent)",
-                         "過渡 (Transitional)",
-                         "流行 (Trendy)",
-                         "從容 (Unhurried)",
-                         "奔放 (Unrestrained)",
-                         "充滿活力 (Vibrant)",
-                         "漫遊式 (Wandering)",
-                         "溫暖 (Warm)",
-                         "充滿智慧 (Wise)",
-                         "俏皮 (Witty)",
-                         "瑜珈式 (Yogic)",
-                         "青春 (Youthful)"], value="正式 (Formal)", multiselect=False, label="改寫文字風格形容詞",
-                        interactive=True)
-                    gr.Markdown("將文本輸入到下面的方塊中，選取改寫風格後，點選改寫後即可將文字基於選取風格進行改寫")
-                    with gr.Row():
-                        with gr.Column(scale=1):
-                            rewrite_inputs = gr.Textbox(lines=30, placeholder="輸入句子...")
-                        with gr.Column(scale=1):
-                            rewrite_output = gr.Text(label="改寫", interactive=True, lines=30, show_copy_button=True)
-                    rewrite_button = gr.Button("送出")
+                rewrite_ui.rewrite_panel()
             with gr.TabItem("長文本摘要"):
                 with gr.Tabs():
                     with gr.TabItem("長文本處理"):
@@ -1306,7 +1141,7 @@ if __name__ == '__main__':
                                             gr.Textbox(label="請輸入Youtube影片完整網址")
                                             gr.Radio(["字幕檔", "音檔轉文字"], label="信息來源")
                             with gr.Column(scale=1):
-                                with gr.Box():
+                                with gr.Group():
                                     summary_radio = gr.Dropdown(
                                         ["滾動式整合摘要", "滾動式累加摘要", "平行分塊摘要"], multiselect=False,
                                         label="摘要技術", type="index",
@@ -1322,8 +1157,7 @@ if __name__ == '__main__':
                             with gr.Column(scale=1):
                                 large_inputs = gr.Text(label="來源文字", lines=30, max_lines=5000)
                             with gr.Column(scale=1, elem_id="col_container"):
-                                summary_output = gr.Markdown(label="摘要", interactive=True, elem_classes='markdown',
-                                                             container=True)
+                                summary_output = gr.Markdown(label="摘要", elem_classes='markdown')
                             rolling_clear_button.add(large_inputs)
                             rolling_clear_button.add(summary_output)
                     with gr.TabItem("存檔"):
@@ -1347,10 +1181,11 @@ if __name__ == '__main__':
                     dropdown_api3 = gr.Dropdown(choices=[k for k in model_info.keys()], value="gpt-4-1106-preview",
                                                 label="其他功能使用之api", interactive=True)
                     gr.Group(dropdown_api1,dropdown_api4,dropdown_api2,dropdown_api3)
-                    cb_db_enable=gr.Checkbox(value=cxt.is_db_enable,label="是否啟用資料庫查詢")
-                    text_conn=gr.Textbox(interactive=cb_db_enable.value,value=cxt.conn_string,label="連線字串")
-                    text_db_schema=gr.TextArea(interactive=cb_db_enable.value,value=cxt.databse_schema,label="資料庫Schema")
-                    gr.Group(cb_db_enable,text_conn,text_db_schema)
+                    settings_panel.database_query_panel()
+
+
+
+
 
 
 
@@ -1383,8 +1218,7 @@ if __name__ == '__main__':
         image_text.submit(image_api, [image_text, image_size, temperature2], [image_prompt, image_gallery])
         image_btn.click(image_api, [image_text, image_size, temperature2], [image_prompt, image_gallery])
 
-        rewrite_inputs.submit(rewrite_api, [rewrite_inputs, rewrite_dropdown], rewrite_output)
-        rewrite_button.click(rewrite_api, [rewrite_inputs, rewrite_dropdown], rewrite_output)
+
 
         rolling_cancel_handel = []
 
@@ -1478,5 +1312,4 @@ if __name__ == '__main__':
 
 
         auto_opentab_delay()
-        demo.queue(concurrency_count=5, api_open=False).launch(show_error=True, max_threads=200, share=True,
-                                                               server_port=PORT)
+        demo.queue( api_open=False).launch(show_error=True, max_threads=200, share=True,server_port=PORT)
