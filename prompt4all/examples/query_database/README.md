@@ -10,15 +10,10 @@
 
 在獲取用戶意圖後，這個query_sql函數首先會將使用者取得數據的意圖，搭配資料庫的schema文件，讓ChatGPT根據文件來編寫出有效的T-SQL語法，這步驟正是Text2SQL，然後再將
 
-
-
 ## 場景
-
-
 
 ## 安裝
 
 [AdventureWorksDW2022.bak](https://github.com/Microsoft/sql-server-samples/releases/download/adventureworks/AdventureWorksDW2022.bak)
 
 ## 使用自己的數據
-
