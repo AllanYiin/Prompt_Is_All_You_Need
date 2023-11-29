@@ -6,7 +6,7 @@
 
 那有甚麼好方法可以整合企業內數據(尤其是實時數據)與ChatGPT呢，在這個範例我們將透過ChatGPT的tool calls功能動態選擇工具，當偵測到使用者的輸入有想要獲得資料庫查詢結果或者是彙總報表與相關欄位的意圖時。ChatGPT就會以tool calls的方式來告知前一個問句命中到了特定工具，而在這個實作中我們將會開發一個名為query_sql函數來作為工具，而引數正是使用者想要獲得數據的意圖。
 
-![流程](images/query_sql.png)
+![流程](prompt4all/images/query_sql.png)
 
 在獲取用戶意圖後，這個query_sql函數首先會將使用者取得數據的意圖，搭配資料庫的schema文件，讓ChatGPT根據文件來編寫出有效的T-SQL語法，這步驟正是Text2SQL，然後再將
 
@@ -17,3 +17,4 @@
 [AdventureWorksDW2022.bak](https://github.com/Microsoft/sql-server-samples/releases/download/adventureworks/AdventureWorksDW2022.bak)
 
 ## 使用自己的數據
+
