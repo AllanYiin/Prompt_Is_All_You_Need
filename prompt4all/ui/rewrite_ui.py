@@ -1,6 +1,7 @@
 import gradio as gr
 from prompt4all import context
 import copy
+
 cxt = context._context()
 
 
@@ -159,11 +160,17 @@ def rewrite_panel():
             interactive=True)
         gr.Markdown("將文本輸入到下面的方塊中，選取改寫風格後，點選改寫後即可將文字基於選取風格進行改寫")
         with gr.Row():
+            rewrite_button = gr.Button("送出")
+            pulse_button = gr.Button("停止")
+        with gr.Row():
             with gr.Column(scale=1):
-                rewrite_inputs = gr.Textbox(lines=30, placeholder="輸入句子...")
+                rewrite_inputs = gr.Textbox(lines=30, placeholder="輸入句子...", show_copy_button=True, )
             with gr.Column(scale=1):
                 rewrite_output = gr.Text(label="改寫", interactive=True, lines=30, show_copy_button=True)
-        rewrite_button = gr.Button("送出")
-    rewrite_inputs.submit(rewrite_api, [rewrite_inputs, rewrite_dropdown], rewrite_output)
-    rewrite_button.click(rewrite_api, [rewrite_inputs, rewrite_dropdown], rewrite_output)
+    cancel_handles = []
+    inputs_event = rewrite_inputs.submit(rewrite_api, [rewrite_inputs, rewrite_dropdown], rewrite_output)
+    click_event = rewrite_button.click(rewrite_api, [rewrite_inputs, rewrite_dropdown], rewrite_output)
+    cancel_handles.append(inputs_event)
+    cancel_handles.append(click_event)
+    pulse_button.click(fn=None, inputs=None, outputs=None, cancels=cancel_handles)
     return _panel
