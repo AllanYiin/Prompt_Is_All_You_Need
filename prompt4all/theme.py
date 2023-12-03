@@ -1,7 +1,7 @@
 import gradio as gr
 
-CODE_HIGHLIGHT=True
-ADD_WAIFU=True
+CODE_HIGHLIGHT = True
+ADD_WAIFU = True
 
 
 # gradio可用颜色列表
@@ -109,7 +109,39 @@ def adjust_theme():
 
 
 advanced_css = """
+#nlu_row .json {
+    overflow: scroll;
+    display: block;
+    max-height: 550px;
+}
+#nlu_row .textbox {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+}
+#nlu_row .tabs {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+}
+#nlu_row .tabitem[style="display: block;"] {
+    flex-grow: 1;
+    display: flex !important;
+}
+#nlu_row .gap {
+    flex-grow: 1;
+}
+#nlu_row .form {
+    flex-grow: 1 !important;
+}
+#nlu_row .form > :last-child{
+    flex-grow: 1;
+}
+
 .contain { display: flex; flex-direction: column; }
+#db_setting_panel{
+    background-color: rgba(69,157,186,0.8);
+}
 #rolling_file {height: 75px;}
 #component-0 { height: 100%; }
 #chatbot { flex-grow: 1; }
