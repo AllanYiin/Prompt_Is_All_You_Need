@@ -43,8 +43,8 @@ from prompt4all.common import *
 from prompt4all import context
 from prompt4all.context import *
 from prompt4all.common import find_available_port
-from prompt4all.ui import settings_ui
-from prompt4all.ui import rewrite_ui
+from prompt4all.ui import settings_ui, rewrite_ui, image_ui
+
 os.chdir(os.path.dirname(__file__))
 cxt = context._context()
 os.environ['no_proxy'] = '*'
@@ -86,7 +86,7 @@ def prompt_api(inputs, context_type, top_p, temperature, top_k, frequency_penalt
     baseChatGpt.API_PARAMETERS['top_k'] = top_k
     baseChatGpt.API_PARAMETERS['frequency_penalty'] = frequency_penalty
     if isinstance(full_history, gr.State):
-        full_history=full_history.value
+        full_history = full_history.value
     streaming_chat = baseChatGpt.post_a_streaming_chat(inputs, _context_type, baseChatGpt.API_PARAMETERS, full_history)
 
     while True:
@@ -99,13 +99,15 @@ def prompt_api(inputs, context_type, top_p, temperature, top_k, frequency_penalt
                 keys = list(cxt.conversation_history.selected_item.mapping.keys())
                 cxt.conversation_history.selected_item.mapping[keys[1]].message.content.parts.append(inputs)
         else:
-            _current_item=cxt.conversation_history.selected_item.current_item
+            _current_item = cxt.conversation_history.selected_item.current_item
             mid = str(uuid.uuid4())
             if _current_item.children is None:
-                _current_item.children=[]
+                _current_item.children = []
             _current_item.children.append(mid)
-            cxt.conversation_history.selected_item.mapping[mid]=Mapping(mapping_id=mid,parent=_current_item.id).new_user_message_mapping(inputs)
-            cxt.conversation_history.selected_item.current_node=mid
+            cxt.conversation_history.selected_item.mapping[mid] = Mapping(mapping_id=mid,
+                                                                          parent=_current_item.id).new_user_message_mapping(
+                inputs)
+            cxt.conversation_history.selected_item.current_node = mid
 
             pass
         try:
@@ -142,33 +144,6 @@ def nlu_api(text_input):
         results.append(json.dumps(output_json, ensure_ascii=False, indent=3))
 
         yield '[' + ', '.join(results) + ']'
-
-
-def image_api(text_input, image_size, temperature=1.2):
-    # 創建與API的對話
-    _system_prompt = open("prompts/dalle2.md", encoding="utf-8").read()
-    _parameters = copy.deepcopy(baseChatGpt.API_PARAMETERS)
-    _parameters['temperature'] = temperature
-    _parameters['max_tokens'] = 100
-    results = []
-    conversation = [
-        {
-            "role": "system",
-            "content": _system_prompt
-        },
-        {
-            "role": "user",
-            "content": text_input
-        }
-    ]
-    image_prompt = imageChatGpt.post_and_get_answer(conversation, _parameters)
-    if ':' in image_prompt:
-        image_prompt = ' '.join(image_prompt.split(':')[1:])
-    images_urls = imageChatGpt.generate_images(image_prompt, text_input, image_size)
-    return image_prompt, images_urls
-
-
-
 
 
 async def summarize_text(text_input, system_prompt):
@@ -903,8 +878,6 @@ def SpeechToText(audio, need_timestamp=False, state=None):
     return (language, result.text)
 
 
-
-
 def process_audio_file(file, state, initial_prompt, need_timestamp=False):
     if file is None:
         return '', state
@@ -975,18 +948,18 @@ def clear_history():
 
 
 def reset_textbox():
-    return gr.Textbox(placeholder="什麼是LLM?",value="",
-                                                        label="輸入文字後按enter", lines=10, max_lines=2000)
+    return gr.Textbox(placeholder="什麼是LLM?", value="",
+                      label="輸入文字後按enter", lines=10, max_lines=2000)
 
 
 def reset_context():
     return gr.Dropdown(
-                                        ["[@PROMPT] 一般指令", "[@GLOBAL] 全局指令", "[@SKIP] 跳脫上文",
-                                         "[@SANDBOX] 沙箱隔絕",
-                                         "[@EXPLAIN] 解釋上文", "[@OVERRIDE] 覆寫全局"],
-                                        value="[@PROMPT] 一般指令", type='index', label="context處理",
-                                        elem_id='context_type',
-                                        interactive=True)
+        ["[@PROMPT] 一般指令", "[@GLOBAL] 全局指令", "[@SKIP] 跳脫上文",
+         "[@SANDBOX] 沙箱隔絕",
+         "[@EXPLAIN] 解釋上文", "[@OVERRIDE] 覆寫全局"],
+        value="[@PROMPT] 一般指令", type='index', label="context處理",
+        elem_id='context_type',
+        interactive=True)
 
 
 def pause_message():
@@ -1009,10 +982,10 @@ if __name__ == '__main__':
         state = gr.State([{"role": "system", "content": '所有內容以繁體中文書寫',
                            "estimate_tokens": estimate_used_tokens('所有內容以繁體中文書寫',
                                                                    model_name=baseChatGpt.API_MODEL)}])  # s
-        cxt.baseChatGpt=baseChatGpt
-        cxt.summaryChatGpt=summaryChatGpt
-        cxt.imageChatGpt=imageChatGpt
-        cxt.otherChatGpt=otherChatGpt
+        cxt.baseChatGpt = baseChatGpt
+        cxt.summaryChatGpt = summaryChatGpt
+        cxt.imageChatGpt = imageChatGpt
+        cxt.otherChatGpt = otherChatGpt
         cxt.state = state
         baseChatGpt.FULL_HISTORY = state.value
         gr.HTML(title)
@@ -1064,8 +1037,10 @@ if __name__ == '__main__':
                                                                  headers=["歷史"], datatype=["str"],
                                                                  col_count=(1, 'fixed'), interactive=True)
                     with gr.Column(scale=4, elem_id="col_container"):
-                        chatbot = gr.Chatbot(elem_id='chatbot', container=True, scale=1, height=550,render_markdown=True,
-                                             show_copy_button=True,bubble_full_width=True,show_share_button=True,layout="panel")
+                        chatbot = gr.Chatbot(elem_id='chatbot', container=True, scale=1, height=550,
+                                             render_markdown=True,
+                                             show_copy_button=True, bubble_full_width=True, show_share_button=True,
+                                             layout="panel")
                         b3.add(chatbot)
 
             with gr.TabItem("歷史"):
@@ -1083,23 +1058,7 @@ if __name__ == '__main__':
                                                  show_copy_button=True)
                     nlu_button = gr.Button("送出")
             with gr.TabItem("Dall.E3"):
-                with gr.Column(variant="panel"):
-                    with gr.Row(variant="compact"):
-                        image_text = gr.Textbox(
-                            label="請輸入中文的描述",
-                            show_label=False,
-                            max_lines=1,
-                            placeholder="請輸入中文的描述",
-                            container=False
-                        )
-                    image_btn = gr.Button("設計與生成圖片", scale=1)
-                    image_prompt = gr.Markdown("")
-                    image_gallery = gr.Gallery(value=None, show_label=False, columns=[4], object_fit="contain",
-                                               height="auto")
-                with gr.Accordion("超參數", open=False):
-                    temperature2 = gr.Slider(minimum=-0, maximum=2.0, value=0.7, step=0.1, interactive=True,
-                                             label="溫度 (Temperature)", )
-                    image_size = gr.Radio([1024], label="圖片尺寸", value=1024)
+                image_ui.image_panel()
             with gr.TabItem("風格改寫"):
                 rewrite_ui.rewrite_panel()
             with gr.TabItem("長文本摘要"):
@@ -1148,10 +1107,12 @@ if __name__ == '__main__':
                                         value="滾動式整合摘要", interactive=True, min_width=150)
                                     summary_options = gr.CheckboxGroup(["心智圖", "會議記錄", "重點主題"],
                                                                        label="輔助功能")
-                                    rolling_button = gr.Button("▶️", size='sm', scale=1, min_width=80)
-                                    rolling_clear_button = gr.ClearButton([rolliing_source_file], value="🗑️", size='sm',
-                                                                          scale=1, min_width=80)
-                                    rolling_cancel_button = gr.Button("⏹️", size='sm', scale=1, min_width=80)
+                                    with gr.Row():
+                                        rolling_button = gr.Button("▶️", size='sm', scale=1, min_width=80)
+                                        rolling_clear_button = gr.ClearButton([rolliing_source_file], value="🗑️",
+                                                                              size='sm',
+                                                                              scale=1, min_width=80)
+                                        rolling_cancel_button = gr.Button("⏹️", size='sm', scale=1, min_width=80)
 
                         with gr.Row():
                             with gr.Column(scale=1):
@@ -1171,7 +1132,6 @@ if __name__ == '__main__':
                             rolling_history_viewer = gr.JSON(elem_id='rolling_history_viewer')
             with gr.TabItem("設定"):
                 with gr.Column():
-
                     dropdown_api1 = gr.Dropdown(choices=[k for k in model_info.keys()], value="gpt-4-1106-preview",
                                                 label="對話使用之api", interactive=True)
                     dropdown_api4 = gr.Dropdown(choices=[k for k in model_info.keys()], value="gpt-4-1106-preview",
@@ -1180,14 +1140,8 @@ if __name__ == '__main__':
                                                 label="長文本摘要使用之api", interactive=True)
                     dropdown_api3 = gr.Dropdown(choices=[k for k in model_info.keys()], value="gpt-4-1106-preview",
                                                 label="其他功能使用之api", interactive=True)
-                    gr.Group(dropdown_api1,dropdown_api4,dropdown_api2,dropdown_api3)
-                    settings_panel.database_query_panel()
-
-
-
-
-
-
+                    gr.Group(dropdown_api1, dropdown_api4, dropdown_api2, dropdown_api3)
+                    settings_ui.database_query_panel()
 
         inputs_event = inputs.submit(prompt_api,
                                      [inputs, context_type, top_p, temperature, top_k, frequency_penalty, state],
@@ -1206,19 +1160,14 @@ if __name__ == '__main__':
         def new_chat(state):
             cxt.conversation_history.new_chat()
             history_list.value = cxt.conversation_history.titles
-            chat=cxt.conversation_history.selected_item.get_gradio_chat()
-            return chat,state
+            chat = cxt.conversation_history.selected_item.get_gradio_chat()
+            return chat, state
 
 
         b4.click(fn=new_chat, inputs=[state], outputs=[chatbot, state])
 
         nlu_inputs.submit(nlu_api, nlu_inputs, nlu_output)
         nlu_button.click(nlu_api, nlu_inputs, nlu_output)
-
-        image_text.submit(image_api, [image_text, image_size, temperature2], [image_prompt, image_gallery])
-        image_btn.click(image_api, [image_text, image_size, temperature2], [image_prompt, image_gallery])
-
-
 
         rolling_cancel_handel = []
 
@@ -1247,8 +1196,8 @@ if __name__ == '__main__':
         def select_conversation(evt: gr.SelectData):
             conversations = cxt.conversation_history.conversations[evt.index[0]].get_prompt_messages(only_final=True)
             cxt.conversation_history.selected_index = evt.index[0]
-            chat=cxt.conversation_history.selected_item.get_gradio_chat()
-            return chat,cxt.state
+            chat = cxt.conversation_history.selected_item.get_gradio_chat()
+            return chat, cxt.state
 
 
         history_list.select(select_conversation, None, [chatbot, state])
@@ -1312,4 +1261,4 @@ if __name__ == '__main__':
 
 
         auto_opentab_delay()
-        demo.queue( api_open=False).launch(show_error=True, max_threads=200, share=True,server_port=PORT)
+        demo.queue(api_open=False).launch(show_error=True, max_threads=200, share=True, server_port=PORT)
