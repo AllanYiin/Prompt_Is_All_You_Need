@@ -41,7 +41,8 @@ def image_panel():
             )
         image_btn = gr.Button("設計與生成圖片", scale=1)
         image_prompt = gr.Markdown("")
-        image_gallery = gr.Gallery(value=None, show_label=False, columns=[4], object_fit="contain",
+        image_gallery = gr.Gallery(value=None, preview=False, allow_preview=True, show_label=False, columns=[2],
+                                   object_fit="cover",
                                    height="auto")
         with gr.Accordion("超參數", open=False):
             temperature2 = gr.Slider(minimum=-0, maximum=2.0, value=0.7, step=0.1, interactive=True,

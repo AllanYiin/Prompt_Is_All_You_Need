@@ -78,10 +78,10 @@ def database_query_panel():
     #
     # cb_db_enable.change(fn=set_visible,inputs=[cb_db_enable], outputs=[])
 
-    schema_file = gr.File(value='examples/query_database/schema.sql', file_count="single",
+    schema_file = gr.File(value='examples/query_database/schema.txt', file_count="single",
                           label='請將檔案拖曳至此或是點擊後上傳',
                           file_types=[".txt", ".json", ".sql"])
-    text_db_schema = gr.TextArea(interactive=False, value=cxt.databse_schema, label="資料庫Schema")
+    text_db_schema = gr.TextArea(interactive=False, value=cxt.databse_schema, label="資料庫Schema文件")
 
     schema_file.change(process_file, [schema_file, db_state], [text_db_schema, db_state])
     _panel = gr.Group(cb_db_enable, conn_setting, text_conn, schema_file, text_db_schema, elem_id="db_setting_panel")
