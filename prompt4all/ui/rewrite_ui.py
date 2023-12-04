@@ -8,7 +8,7 @@ cxt = context._context()
 def rewrite_api(text_input, style_name):
     # 創建與API的對話
 
-    style_name = style_name.split('(')[0].strip()
+    style_name = '+ '.join(style_name) if isinstance(style_name, list) else style_name.split('(')[0].strip()
     _parameters = copy.deepcopy(cxt.baseChatGpt.API_PARAMETERS)
     _parameters['temperature'] = 1.2
     _parameters['frequency_penalty'] = 0
@@ -156,7 +156,7 @@ def rewrite_panel():
              "充滿智慧 (Wise)",
              "俏皮 (Witty)",
              "瑜珈式 (Yogic)",
-             "青春 (Youthful)"], value="正式 (Formal)", multiselect=False, label="改寫文字風格形容詞",
+             "青春 (Youthful)"], value=["正式 (Formal)"], multiselect=True, label="改寫文字風格形容詞",
             interactive=True)
         gr.Markdown("將文本輸入到下面的方塊中，選取改寫風格後，點選改寫後即可將文字基於選取風格進行改寫")
         with gr.Row():
