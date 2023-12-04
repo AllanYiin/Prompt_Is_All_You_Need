@@ -1,20 +1,22 @@
-
 import regex
 
 __all__ = [
-    "choice_pattern","delta_pattern","json_pattern",'numbered_list_member_pattern','unordered_listitem_pattern',"replace_special_chars",'extract_score','extract_code','triplequote_pattern','is_numbered_list_member','is_unordered_list_member','extract_numbered_list_member']
-choice_pattern =regex.compile(r'"choices":\s*\[(\{.*?\})\]')
+    "choice_pattern", "delta_pattern", "json_pattern", 'numbered_list_member_pattern', 'unordered_listitem_pattern',
+    "replace_special_chars", 'extract_score', 'extract_code', 'triplequote_pattern', 'is_numbered_list_member',
+    'is_unordered_list_member', 'extract_numbered_list_member']
+choice_pattern = regex.compile(r'"choices":\s*\[(\{.*?\})\]')
 
 delta_pattern = regex.compile(r'"delta":\s*{"content":"([^"]*)"}')
 
 json_pattern = regex.compile(r'\{(?:[^{}]|(?R))*\}')
 
-triplequote_pattern=regex.compile(r"```(.*)```")
+triplequote_pattern = regex.compile(r"```(.*)```")
 
-unordered_listitem_pattern=regex.compile(r"\s*([-*+])\s+(.*)$")
-numbered_list_member_pattern=regex.compile(r'\s*(\d+(\.\d+)*\.?)(?=\s)')
+unordered_listitem_pattern = regex.compile(r"\s*([-*+])\s+(.*)$")
+numbered_list_member_pattern = regex.compile(r'\s*(\d+(\.\d+)*\.?)(?=\s)')
 
-code_pattern=regex.compile(r'```(.*?)```')
+code_pattern = regex.compile(r'```(.*?)```')
+
 
 def replace_special_chars(input_str):
     # 匹配除了英文、數字、漢字以外的字符
@@ -34,6 +36,7 @@ def extract_score(text):
     else:
         return None
 
+
 def extract_code(text):
     """
     從給定的文本中提取代碼區塊。
@@ -41,16 +44,21 @@ def extract_code(text):
     :param text: 包含代碼區塊的字符串。
     :return: 包含所有代碼區塊的列表。
     """
-    code_blocks = regex.findall(r'```(.*?)```', text, regex.DOTALL)[0][4:]
+    code_blocks = regex.findall(r'```(.*?)```', text, regex.DOTALL)
+    if code_blocks and len(code_blocks) > 0:
+        return code_blocks[0][4:]
+    elif text.lower().startswith('select'):
+        return text
     return code_blocks
-
 
 
 def is_numbered_list_member(string):
     return bool(regex.match(numbered_list_member_pattern, string))
 
+
 def is_unordered_list_member(string):
     return bool(regex.match(unordered_listitem_pattern, string))
+
 
 def extract_numbered_list_member(string):
     """
@@ -77,6 +85,7 @@ def extract_numbered_list_member(string):
         return match.group(1)
     else:
         return ''
+
 
 def extract_unordered_list_member(string):
     """

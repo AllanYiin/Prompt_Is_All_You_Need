@@ -11,9 +11,9 @@ from collections import OrderedDict
 from functools import partial
 import numpy as np
 
-_prompt4all_context=None
+_prompt4all_context = None
 
-__all__ = ["sanitize_path","split_path","make_dir_if_need","_context","get_sitepackages", "PrintException"]
+__all__ = ["sanitize_path", "split_path", "make_dir_if_need", "_context", "get_sitepackages", "PrintException"]
 
 
 def sanitize_path(path):
@@ -31,15 +31,16 @@ def sanitize_path(path):
 
     """
     if path.startswith('~/'):
-        path=os.path.join(os.path.expanduser("~"),path[2:])
-    path=os.path.abspath(path)
+        path = os.path.join(os.path.expanduser("~"), path[2:])
+    path = os.path.abspath(path)
     return path.strip().replace('\\', '/')
     # if isinstance(path, str):
     #     return os.path.normpath(path.strip()).replace('\\', '/')
     # else:
     #     return path
 
-def split_path(path:str):
+
+def split_path(path: str):
     """split path into folder, filename and ext 3 parts clearly.
 
     Args:
@@ -110,7 +111,7 @@ def PrintException():
 
 
 def get_sitepackages():  # pragma: no cover
-    installed_packages=None
+    installed_packages = None
     try:
         import subprocess
         import sys
@@ -168,30 +169,51 @@ class _Context:
     _instance_lock = threading.Lock()
 
     def __init__(self):
+        super().__setattr__('is_initialized', False)
         self._thread_local_info = _ThreadLocalInfo()
         self._context_handle = OrderedDict()
-        self._errors_config= OrderedDict()
-        self.whisper_model=None
+        self._errors_config = OrderedDict()
         self._module_dict = dict()
+        self.conversation_history = None
+        self.print = partial(print, flush=True)
+
         self.prompt4all_dir = self.get_prompt4all_dir()
-        self.backend =None
-        self.conversation_history=None
-        self.print=partial(print,flush=True)
-        self.locale = locale.getdefaultlocale()[0].lower()
+        self.baseChatGpt = None
+        self.summaryChatGpt = None
+        self.imageChatGpt = None
+        self.otherChatGpt = None
+        self.state = None
+        self.sql_engine = None
+        self.conn_string = None
+        self.databse_schema = None
+        self.is_db_enable = False
+        self.numpy_print_format = '{0:.4e}'
+        self.plateform = None
+        self.whisper_model = None
+
+        if os.path.exists(os.path.join(self.get_prompt4all_dir(), 'session.json')):
+            self.load_session(os.path.join(self.get_prompt4all_dir(), 'session.json'))
+
+        else:
+            self.conversation_history = None
+            self.locale = locale.getdefaultlocale()[0].lower()
+
+            self.plateform = self.get_plateform()
+            self.numpy_print_format = '{0:.4e}'
+            np.set_printoptions(formatter={'float_kind': lambda x: self.numpy_print_format.format(x)}, precision=4,
+                                suppress=True)
+            self.is_db_enable = False
+        self.conn_string = 'mssql+pyodbc://@' + 'localhost' + '/' + 'AdventureWorksDW2022' + '?trusted_connection=yes&driver=ODBC+Driver+17+for+SQL+Server'
+        self.databse_schema = open("examples/query_database/schema.txt", encoding="utf-8").read()
+
         if 'PROMPT4ALL_WORKING_DIR' in os.environ:
             self.working_directory = os.environ['PROMPT4ALL_WORKING_DIR']
             os.chdir(os.environ['PROMPT4ALL_WORKING_DIR'])
         else:
             self.working_directory = os.getcwd()
-        self.plateform = self.get_plateform()
-        self.numpy_print_format = '{0:.4e}'
-        np.set_printoptions(formatter={'float_kind': lambda x: self.numpy_print_format.format(x)},precision=4,suppress=True)
-        self.is_db_enable=False
 
-        self.conn_string='mssql+pyodbc://@' + 'localhost' + '/' + 'AdventureWorksDW2022' + '?trusted_connection=yes&driver=ODBC+Driver+17+for+SQL+Server'
-        self.databse_schema= open("examples/query_database/schema.sql", encoding="utf-8").read()
-        self.initial_context()
-
+        super().__setattr__('is_initialized', True)
+        self.write_session()
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
@@ -249,30 +271,6 @@ class _Context:
         else:
             return plateform_str
 
-    def initial_context(self):
-
-        site_packages=get_sitepackages()
-
-        _config_path = os.path.expanduser(os.path.join(self.prompt4all_dir, 'prompt4all.json'))
-        _config = {}
-
-        if os.path.exists(_config_path):
-            try:
-                with open(_config_path) as f:
-                    _config = json.load(f)
-                    for k, v in _config.items():
-                        try:
-                            if k == 'floatx':
-                                assert v in {'float16', 'float32', 'float64'}
-                            if k not in ['prompt4all_dir', 'device', 'working_directory']:
-                                self.__setattr__(k, v)
-                        except Exception as e:
-                            print(e)
-            except ValueError as ve:
-                print(ve)
-
-
-
     def __getattribute__(self, attr):
         value = object.__getattribute__(self, attr)
         if attr == "_context_handle" and value is None:
@@ -299,16 +297,59 @@ class _Context:
 
         return dd[cls_name]
 
+    def write_session(self, session_path=None):
+        if session_path is None:
+            session_path = os.path.join(self.get_prompt4all_dir(), 'session.json')
+        try:
+            with open(session_path, 'w') as f:
+                session = self.__dict__.copy()
+                session.pop('_thread_local_info')
+                session.pop('_context_handle')
+                session.pop('_module_dict')
+                session.pop('conversation_history')
+                session.pop('is_initialized')
+                session.pop('sql_engine')
 
+                session.pop('print')
 
+                session['baseChatGpt'] = self.baseChatGpt if isinstance(self.baseChatGpt,
+                                                                        str) else self.baseChatGpt.api_model if self.baseChatGpt else None
+                session['summaryChatGpt'] = self.summaryChatGpt if isinstance(self.summaryChatGpt,
+                                                                              str) else self.summaryChatGpt.api_model if self.summaryChatGpt else None
+                session['imageChatGpt'] = self.imageChatGpt if isinstance(self.imageChatGpt,
+                                                                          str) else self.imageChatGpt.api_model if self.imageChatGpt else None
+                session['otherChatGpt'] = self.otherChatGpt if isinstance(self.otherChatGpt,
+                                                                          str) else self.otherChatGpt.api_model if self.otherChatGpt else None
+                session['state'] = self.state if isinstance(self.state, str) else str(
+                    self.state.value) if self.state else None
+                f.write(json.dumps(session, indent=4, ensure_ascii=False))
+        except IOError:
+            # Except permission denied.
+            pass
 
-    def regist_resources(self,resource_name,resource ):
-        if not hasattr(self._thread_local_info,'resources'):
-            self._thread_local_info.resources=OrderedDict()
-        self._thread_local_info.resources[resource_name]=resource
+    def load_session(self, session_path=None):
+        if session_path is None:
+            session_path = os.path.join(self.get_prompt4all_dir(), 'session.json')
+
+        if os.path.exists(session_path):
+            try:
+                with open(session_path) as f:
+                    _session = json.load(f)
+                    for k, v in _session.items():
+                        try:
+                            self.__setattr__(k, v)
+                        except Exception as e:
+                            print(e)
+            except ValueError as ve:
+                print(ve)
+
+    def regist_resources(self, resource_name, resource):
+        if not hasattr(self._thread_local_info, 'resources'):
+            self._thread_local_info.resources = OrderedDict()
+        self._thread_local_info.resources[resource_name] = resource
         return self._thread_local_info.resources[resource_name]
 
-    def get_resources(self,resource_name):
+    def get_resources(self, resource_name):
         if not hasattr(self._thread_local_info, 'resources'):
             self._thread_local_info.resources = OrderedDict()
         if resource_name in self._thread_local_info.resources:
@@ -316,11 +357,14 @@ class _Context:
         else:
             return None
 
-
-
-
-
-
+    def __setattr__(self, name: str, value) -> None:
+        try:
+            object.__setattr__(self, name, value)
+            if self.is_initialized:
+                self.write_session(os.path.join(self.get_prompt4all_dir(), 'session.json'))
+        except Exception as e:
+            print(name, value, e)
+            PrintException()
 
 
 def _context():

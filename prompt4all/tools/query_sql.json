@@ -1,14 +1,16 @@
 {
   "name": "query_sql",
-  "description": "將使用者查詢資料庫或者是取得某個彙總數據的需求轉成T-SQL後直接執行並回傳結果",
+  "description": "Translate the user’s query to the database or the request to get some aggregate data into T-SQL, then execute it and return the result.",
   "parameters": {
     "type": "object",
     "properties": {
       "query_intent": {
         "type": "string",
-        "description": "使用者查詢資料庫或者是取得某個彙總數據的需求"
+        "description": "The full snippet of the user’s input message regarding the need to query the database or get some summary data"
       }
     },
-    "required": ["query_intent"]
+    "required": [
+      "query_intent"
+    ]
   }
 }

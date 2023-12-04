@@ -14,15 +14,16 @@ import pandas as pd
 from typing import Optional, Union
 import torch
 
-cxt=context._context()
+cxt = context._context()
 
+__all__ = ["whisper_model", "to_formated_time", "recognize_whisper", "record_timeout", "phrase_timeout",
+           "no_speech_threshold", "load_whisper_model", "load_audio", "get_audio_duration"]
 
-__all__ = ["whisper_model","to_formated_time","recognize_whisper","record_timeout","phrase_timeout","no_speech_threshold","load_whisper_model","load_audio","get_audio_duration"]
-
-whisper_model=None
-record_timeout=2
-phrase_timeout=3
-no_speech_threshold=0.6
+whisper_model = None
+record_timeout = 2
+phrase_timeout = 3
+no_speech_threshold = 0.6
+whisper_models = ['tiny', 'base', 'small', 'medium', 'large', 'large-v2', 'large-v3']
 
 
 class Segment:
@@ -31,11 +32,13 @@ class Segment:
         self.end = end
         self.speaker = speaker
 
+
 def assign_word_speakers(diarize_df, transcript_result, fill_nearest=False):
     transcript_segments = transcript_result["segments"]
     for seg in transcript_segments:
         # assign speaker to segment (if any)
-        diarize_df['intersection'] = np.minimum(diarize_df['end'], seg['end']) - np.maximum(diarize_df['start'],seg['start'])
+        diarize_df['intersection'] = np.minimum(diarize_df['end'], seg['end']) - np.maximum(diarize_df['start'],
+                                                                                            seg['start'])
         diarize_df['union'] = np.maximum(diarize_df['end'], seg['end']) - np.minimum(diarize_df['start'], seg['start'])
         # remove no hit, otherwise we look for closest (even negative intersection...)
         if not fill_nearest:
@@ -53,7 +56,8 @@ def assign_word_speakers(diarize_df, transcript_result, fill_nearest=False):
                 if 'start' in word:
                     diarize_df['intersection'] = np.minimum(diarize_df['end'], word['end']) - np.maximum(
                         diarize_df['start'], word['start'])
-                    diarize_df['union'] = np.maximum(diarize_df['end'], word['end']) - np.minimum(diarize_df['start'],word['start'])
+                    diarize_df['union'] = np.maximum(diarize_df['end'], word['end']) - np.minimum(diarize_df['start'],
+                                                                                                  word['start'])
                     # remove no hit
                     if not fill_nearest:
                         dia_tmp = diarize_df[diarize_df['intersection'] > 0]
@@ -66,16 +70,18 @@ def assign_word_speakers(diarize_df, transcript_result, fill_nearest=False):
 
     return transcript_result
 
-def load_whisper_model():
-    if cxt.whisper_model is None:
-        cxt.whisper_model = whisper.load_model('medium', device='cpu')
-        print('Whisper small model載入完成!')
 
+def load_whisper_model(model_name='medium'):
+    if cxt.whisper_model in whisper_models:
+        cxt.whisper_model = whisper.load_model(cxt.whisper_model, device='cpu')
+    else:
+        cxt.whisper_model = whisper.load_model(model_name, device='cpu')
+        print('Whisper small model載入完成!')
     return cxt.whisper_model
 
-def to_formated_time(float_time):
-    return format_timestamp(float_time,always_include_hours=True)
 
+def to_formated_time(float_time):
+    return format_timestamp(float_time, always_include_hours=True)
 
 
 def get_audio_duration(file: str):
@@ -122,7 +128,7 @@ def load_audio(file: str, sample_rate: int = 16000,
     return np.frombuffer(out, np.int16).flatten().astype(np.float32) / 32768.0
 
 
-def recognize_whisper(audio_data,word_timestamps=False,language='zh', translate=False, **transcribe_options):
+def recognize_whisper(audio_data, word_timestamps=False, language='zh', translate=False, **transcribe_options):
     """
     Performs speech recognition on ``audio_data`` (an ``AudioData`` instance), using Whisper.
 
@@ -138,11 +144,11 @@ def recognize_whisper(audio_data,word_timestamps=False,language='zh', translate=
     """
 
     if cxt.whisper_model is None:
-        cxt.whisper_model=whisper.load_model('small', device='cuda')
-        return {"text":'Whisper medium model載入完成!',"no_speech_prob":0.001}
+        cxt.whisper_model = whisper.load_model('small', device='cuda')
+        return {"text": 'Whisper medium model載入完成!', "no_speech_prob": 0.001}
 
     # 16 kHz https://github.com/openai/whisper/blob/28769fcfe50755a817ab922a7bc83483159600a9/whisper/audio.py#L98-L99
-    if not isinstance(audio_data,np.ndarray):
+    if not isinstance(audio_data, np.ndarray):
         # wav_bytes = audio_data.get_wav_data(convert_rate=16000)
         # wav_stream = io.BytesIO(wav_bytes)
         # audio_array, sampling_rate = sf.read(wav_stream)
@@ -154,29 +160,24 @@ def recognize_whisper(audio_data,word_timestamps=False,language='zh', translate=
             word_timestamps=word_timestamps,
             verbose=True,
             task="translate" if translate else None,
-            fp16=True if cxt.whisper_model.device=="cuda" and torch.cuda.is_available() else False,
+            fp16=True if cxt.whisper_model.device == "cuda" and torch.cuda.is_available() else False,
             no_speech_threshold=0.65,
             initial_prompt="#zh-tw 使用ChatGPT以及Whisper會議記錄逐字稿",
             **transcribe_options
         )
 
     else:
-        audio_array=audio_data.astype(np.float16  if cxt.whisper_model.device=="cuda" and torch.cuda.is_available() else np.float32 )
+        audio_array = audio_data.astype(
+            np.float16 if cxt.whisper_model.device == "cuda" and torch.cuda.is_available() else np.float32)
         result = cxt.whisper_model.transcribe(
             audio_array,
             language=language,
             word_timestamps=word_timestamps,
             task="translate" if translate else None,
-            fp16=True if cxt.whisper_model.device=="cuda" and torch.cuda.is_available() else False,
+            fp16=True if cxt.whisper_model.device == "cuda" and torch.cuda.is_available() else False,
             no_speech_threshold=0.6,
             initial_prompt="#zh-tw 使用ChatGPT以及Whisper會議記錄逐字稿",
             **transcribe_options
         )
 
     return result
-
-
-
-
-
-

@@ -97,10 +97,11 @@ model_info = {
 
 class GptBaseApi:
     def __init__(self, model="gpt-4-1106-preview", temperature=0.5,
-                 system_message='#zh-TW 所有內容以繁體中文書寫', enable_db=False):
+                 system_message='#zh-TW 請以繁體中文回答', enable_db=False):
         self.API_MODEL = None
         self.API_TYPE = None
         self.BASE_URL = None
+        self.client = None
         self.MAX_TOKENS = NOT_GIVEN
         self.API_KEY = os.getenv("OPENAI_API_KEY")
 
@@ -118,7 +119,7 @@ class GptBaseApi:
             "Authorization": f"Bearer {self.API_KEY}"
         }
         self.SYSTEM_MESSAGE = system_message
-        self.API_PARAMETERS = {'top_p': 1, 'temperature': temperature, 'top_k': 1, 'presence_penalty': 0.5,
+        self.API_PARAMETERS = {'top_p': 1, 'temperature': temperature, 'top_k': 1, 'presence_penalty': 0,
                                'frequency_penalty': 0}
         self.FULL_HISTORY = [{"role": "system", "content": self.SYSTEM_MESSAGE,
                               "estimate_tokens": estimate_used_tokens(self.SYSTEM_MESSAGE, model_name=self.api_model)}]
@@ -155,10 +156,14 @@ class GptBaseApi:
                 self.API_MODEL = model
                 self.API_TYPE = 'openai'
                 openai.api_type = 'openai'
-        if need_change:
+        if need_change or not self.client:
+            self.API_MODEL = model
             self.BASE_URL = model_info[model]["endpoint"]
             self.MAX_TOKENS = model_info[model]["max_token"]
             self.API_KEY = os.getenv("OPENAI_API_KEY")
+            self.client = OpenAI()
+            self.client._custom_headers['Accept-Language'] = 'zh-TW'
+
         self.enable_database_query(cxt.is_db_enable)
 
     def enable_database_query(self, is_enable: bool):
@@ -291,7 +296,7 @@ class GptBaseApi:
         return payload
 
     def make_response(self, model, message_with_context, parameters, stream=True):
-        return client.chat.completions.create(
+        return self.client.chat.completions.create(
             model=model,
             messages=message_with_context,
             temperature=parameters.get('temperature'),
@@ -308,8 +313,8 @@ class GptBaseApi:
 
     async def make_async_response(self, model, message_with_context, parameters, stream=False):
         self.functions = functions
-        aclient = AsyncOpenAI()
-        return await aclient.chat.completions.acreate(
+        self.aclient = AsyncOpenAI()
+        return await self.aclient.chat.completions.acreate(
             model=model,
             messages=message_with_context,
             temperature=parameters.get('temperature'),
@@ -500,7 +505,8 @@ class GptBaseApi:
                     "query_sql": database_tools.query_sql,
                 }  # only one function in this example, but you can have multiple
 
-                # message_context.append({"role": "assistant", "content":  full_history[-1]['content'], 'tool_calls':tool_calls})
+                # message_context.append(
+                #     {"role": "assistant", "content": ""})
                 status_word = "生成SQL語法..."
                 full_history[-1]['content'] = status_word
                 chat = [(process_chat(full_history[i]), process_chat(full_history[i + 1])) for i in
@@ -517,10 +523,9 @@ class GptBaseApi:
                         query_intent=function_args.get("query_intent")
                     )
 
-                    message_context.append({'role': 'assistant', 'content': None, 'tool_calls': tool_calls})
-                    message_context.append(
-                        {"role": "tool", "tool_call_id": tool_call['id'], "name": tool_call["function"]["name"],
-                         "content": function_response})
+                    # message_context.append(
+                    #     {"role": "tool", "tool_call_id": tool_call['id'], "name": function_name,
+                    #      "content": function_response})
 
                     status_word = "執行資料庫查詢..."
                     full_history[-1]['content'] = status_word
@@ -537,13 +542,14 @@ class GptBaseApi:
                     #     }
                     # )
                     # full_history.append(message_context[-1])
-                    # if message_context[-1]['content'] is None:
-                    #     message_context[-1]['content']=''
-                    # message_context[-1]['content']+='\n'+function_response
-                    second_response = client.chat.completions.create(
+                    if message_context[-1]['content'] is None:
+                        message_context[-1]['content'] = ''
+                    message_context[-1]['content'] += '\n' + function_response
+                    second_response = self.client.chat.completions.create(
                         model=self.api_model,
                         messages=message_context,
-                        stream=True)
+                        stream=True,
+                    )
                     for second_chunk in second_response:
 
                         this_second_choice = chunk_message = second_chunk.choices[0]

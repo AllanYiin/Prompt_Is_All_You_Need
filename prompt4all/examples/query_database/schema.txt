@@ -1,0 +1,32 @@
+#AdventureWorksDW2022 資料庫摘要
+
+## 事實資料表 (Fact Table)
+### 表格: FactResellerSales (線下店、實體店、經銷商銷售，無法串到個別客戶)
+- 重要欄位:ProductKey,OrderDate(datetime型別), DueDate(datetime型別), ShipDate(datetime型別), ResellerKey, EmployeeKey, PromotionKey, CurrencyKey, SalesTerritoryKey, SalesOrderNumber, OrderQuantity, UnitPrice, SalesAmount,TotalProductCost
+
+### 表格: FactInternetSales(線上、網上、電商銷售，可以串到個別客戶)
+- 重要欄位:ProductKey, OrderDate(datetime型別), DueDate(datetime型別), ShipDate(datetime型別),  PromotionKey, CurrencyKey, CustomerKey(串到客戶), SalesOrderNumber, OrderQuantity, UnitPrice,  SalesAmount,TotalProductCost
+
+###毛利=sum(SalesAmount)-sum(TotalProductCost)
+###毛利率=(sum(SalesAmount)-sum(TotalProductCost))/isnull(sum(SalesAmount),1)
+
+## 顧客實體 (Customer Entity)
+### 表格: DimCustomer, DimGeography
+- 重要欄位:
+  DimCustomer: CustomerKey, CustomerAlternateKey, FirstName, LastName, EmailAddress, YearlyIncome, TotalChildren, NumberChildrenAtHome, EnglishEducation, DateFirstPurchase, BirthDate（顧客的生日）
+  DimGeography: City, StateProvinceName, CountryRegionCode, PostalCode
+
+## 產品實體 (Product Entity)
+### 表格: DimProduct(產品/SKU), DimProductSubcategory(產品子類別/ 產品中分類), DimProductCategory(產品類別/ 產品大分類)
+
+- 重要欄位:
+  DimProduct: ProductKey, ProductAlternateKey, EnglishProductName, Color, StandardCost, ListPrice, Size, Weight
+  DimProductSubcategory: ProductSubcategoryKey, EnglishProductSubcategoryName, ProductCategoryKey
+  DimProductCategory: ProductCategoryKey, EnglishProductCategoryName
+
+## 經銷商實體 (Reseller Entity)
+### 表格: DimReseller, DimGeography,DimSalesTerritory
+- 重要欄位:
+  DimReseller: ResellerKey, ResellerAlternateKey, BusinessType, ResellerName, NumberEmployees, AnnualSales, MinPaymentAmount, YearOpened
+  DimGeography: City, StateProvinceName, CountryRegionCode, PostalCode
+  DimSalesTerritory: SalesTerritoryKey, SalesTerritoryRegion, SalesTerritoryCountry

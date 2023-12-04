@@ -2,10 +2,12 @@ import gradio as gr
 from prompt4all import context
 from prompt4all.context import *
 from prompt4all.utils.database_utils import parse_connection_string
+from prompt4all.tools.database_tools import *
 from prompt4all.utils.io_utils import process_file
+import pyodbc
 
 cxt = context._context()
-
+driver = sorted(pyodbc.drivers())
 __all__ = ['database_query_panel']
 
 
@@ -18,7 +20,7 @@ def database_query_panel():
         # tb_user_name, tb_password.interactive = is_enabled
         # tb_database_name.interactive = is_enabled
         # tb_driver_name.interactive = is_enabled
-        cxt.is_db_enable=is_enabled
+        cxt.is_db_enable = is_enabled
         cxt.baseChatGpt.enable_database_query(is_enabled)
 
     def get_conn_string(server_name, trusted_connection, user_name, password, database_name, driver_name):
@@ -32,7 +34,7 @@ def database_query_panel():
 
     conn_dict = parse_connection_string(cxt.conn_string)
     cb_db_enable = gr.Checkbox(value=cxt.is_db_enable, label="是否啟用資料庫查詢")
-    cb_db_enable.change(fn=enable_dbquery,inputs=[cb_db_enable],outputs=[])
+    cb_db_enable.change(fn=enable_dbquery, inputs=[cb_db_enable], outputs=[])
     with gr.Group('資料庫設定') as conn_setting:
         tb_driver_name = gr.Textbox(interactive=True, value=conn_dict.get('driver', 'master'), label="資料提供者名稱")
         with gr.Row():

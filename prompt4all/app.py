@@ -59,6 +59,7 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 model_lists = openai.models.list()
 
 ##
+
 initialize_conversation_history()
 
 
@@ -81,13 +82,14 @@ def index2context(idx: int):
 
 def prompt_api(inputs, context_type, top_p, temperature, top_k, frequency_penalty, full_history=[]):
     _context_type = index2context(context_type)
-    baseChatGpt.API_PARAMETERS['temperature'] = temperature
-    baseChatGpt.API_PARAMETERS['top_p'] = top_p
-    baseChatGpt.API_PARAMETERS['top_k'] = top_k
-    baseChatGpt.API_PARAMETERS['frequency_penalty'] = frequency_penalty
+    cxt.baseChatGpt.API_PARAMETERS['temperature'] = temperature
+    cxt.baseChatGpt.API_PARAMETERS['top_p'] = top_p
+    cxt.baseChatGpt.API_PARAMETERS['top_k'] = top_k
+    cxt.baseChatGpt.API_PARAMETERS['frequency_penalty'] = frequency_penalty
     if isinstance(full_history, gr.State):
         full_history = full_history.value
-    streaming_chat = baseChatGpt.post_a_streaming_chat(inputs, _context_type, baseChatGpt.API_PARAMETERS, full_history)
+    streaming_chat = cxt.baseChatGpt.post_a_streaming_chat(inputs, _context_type, cxt.baseChatGpt.API_PARAMETERS,
+                                                           full_history)
 
     while True:
         if _context_type == ContextType.override:
@@ -139,14 +141,15 @@ async def summarize_text(text_input, system_prompt):
             "content": passage
         }
     ]
-    _parameters = copy.deepcopy(summaryChatGpt.API_PARAMETERS)
+    _parameters = copy.deepcopy(cxt.summaryChatGpt.API_PARAMETERS)
     _parameters['temperature'] = 0.001
     _parameters['presence_penalty'] = 1.2
-    payload = summaryChatGpt.parameters2payload(summaryChatGpt.API_MODEL, conversation, _parameters, stream=False)
+    payload = cxt.summaryChatGpt.parameters2payload(cxt.summaryChatGpt.API_MODEL, conversation, _parameters,
+                                                    stream=False)
 
     response = await asyncio.to_thread(
         requests.post,
-        summaryChatGpt.BASE_URL, headers=summaryChatGpt.API_HEADERS, json=payload, stream=False
+        cxt.summaryChatGpt.BASE_URL, headers=cxt.summaryChatGpt.API_HEADERS, json=payload, stream=False
     )
 
     try:
@@ -162,7 +165,7 @@ async def summarize_text(text_input, system_prompt):
 
 
 async def rolling_summary(large_inputs, full_history, summary_method, summary_options):
-    _parameters = copy.deepcopy(summaryChatGpt.API_PARAMETERS)
+    _parameters = copy.deepcopy(cxt.summaryChatGpt.API_PARAMETERS)
     _parameters['temperature'] = 0
     _parameters['presence_penalty'] = 1.2
     large_inputs = large_inputs.split('\n') if isinstance(large_inputs, str) else large_inputs
@@ -187,10 +190,10 @@ async def rolling_summary(large_inputs, full_history, summary_method, summary_op
 
         summary_history = '空的清單'
         this_system_tokens = estimate_used_tokens(_system_prompt) + estimate_used_tokens('system',
-                                                                                         model_name=summaryChatGpt.API_MODEL) + 4
+                                                                                         model_name=cxt.summaryChatGpt.API_MODEL) + 4
         this_final_tokens = estimate_used_tokens(_final_prompt) + estimate_used_tokens('system',
-                                                                                       model_name=summaryChatGpt.API_MODEL) + 4
-        available_tokens = summaryChatGpt.MAX_TOKENS - this_system_tokens - 4 - 2
+                                                                                       model_name=cxt.summaryChatGpt.API_MODEL) + 4
+        available_tokens = cxt.summaryChatGpt.MAX_TOKENS - this_system_tokens - 4 - 2
         this_summary_tokens = estimate_used_tokens(summary_history)
         this_available_tokens = (available_tokens - 2 * this_summary_tokens) * 0.667 - 100
 
@@ -224,7 +227,7 @@ async def rolling_summary(large_inputs, full_history, summary_method, summary_op
                     else:
                         is_final_stage = True
                         keep_summary = False
-                        available_tokens = summaryChatGpt.MAX_TOKENS - this_final_tokens - 4 - 2
+                        available_tokens = cxt.summaryChatGpt.MAX_TOKENS - this_final_tokens - 4 - 2
                         this_summary_tokens = 0
                         this_available_tokens = (available_tokens) // 2 - 100
                         large_inputs = copy.deepcopy(unchanged_summary)
@@ -267,12 +270,13 @@ async def rolling_summary(large_inputs, full_history, summary_method, summary_op
                 ]
                 print(conversation)
 
-                _max_tokens = builtins.min(summaryChatGpt.MAX_TOKENS,
+                _max_tokens = builtins.min(cxt.summaryChatGpt.MAX_TOKENS,
                                            estimate_used_tokens(str(conversation)) + estimate_used_tokens(
                                                '\n'.join(partial_words)) * (0.3 if not is_final_stage else 1))
                 _parameters['max_tokens'] = _max_tokens
 
-                streaming_answer = summaryChatGpt.post_and_get_streaming_answer(conversation, _parameters, full_history)
+                streaming_answer = cxt.summaryChatGpt.post_and_get_streaming_answer(conversation, _parameters,
+                                                                                    full_history)
                 answer = ''
                 answer_head = """  \n## 第{0}部分摘要 {1:.2%}  \n\n\n""".format(cnt + 1, float(
                     large_inputs_tokens - remain_tokens) / large_inputs_tokens).replace('\n\n\n',
@@ -318,10 +322,10 @@ async def rolling_summary(large_inputs, full_history, summary_method, summary_op
 
         summary_history = '空的清單'
         this_system_tokens = estimate_used_tokens(_system_prompt) + estimate_used_tokens('system',
-                                                                                         model_name=summaryChatGpt.API_MODEL) + 4
+                                                                                         model_name=cxt.summaryChatGpt.API_MODEL) + 4
         this_final_tokens = estimate_used_tokens(_final_prompt) + estimate_used_tokens('system',
-                                                                                       model_name=summaryChatGpt.API_MODEL) + 4
-        available_tokens = summaryChatGpt.MAX_TOKENS - this_system_tokens - 4 - 2
+                                                                                       model_name=cxt.summaryChatGpt.API_MODEL) + 4
+        available_tokens = cxt.summaryChatGpt.MAX_TOKENS - this_system_tokens - 4 - 2
         this_summary_tokens = estimate_used_tokens(summary_history)
         this_available_tokens = (available_tokens - 2 * this_summary_tokens) * 0.667 - 100
 
@@ -355,7 +359,7 @@ async def rolling_summary(large_inputs, full_history, summary_method, summary_op
                     else:
                         is_final_stage = True
                         keep_summary = False
-                        available_tokens = summaryChatGpt.MAX_TOKENS - this_final_tokens - 4 - 2
+                        available_tokens = cxt.summaryChatGpt.MAX_TOKENS - this_final_tokens - 4 - 2
                         this_summary_tokens = 0
                         this_available_tokens = (available_tokens) // 2 - 100
                         large_inputs = copy.deepcopy(unchanged_summary)
@@ -398,12 +402,13 @@ async def rolling_summary(large_inputs, full_history, summary_method, summary_op
                 ]
                 print(conversation)
 
-                _max_tokens = builtins.min(summaryChatGpt.MAX_TOKENS,
+                _max_tokens = builtins.min(cxt.summaryChatGpt.MAX_TOKENS,
                                            estimate_used_tokens(str(conversation)) + estimate_used_tokens(
                                                '\n'.join(partial_words)) * (0.3 if not is_final_stage else 1))
                 _parameters['max_tokens'] = _max_tokens
 
-                streaming_answer = summaryChatGpt.post_and_get_streaming_answer(conversation, _parameters, full_history)
+                streaming_answer = cxt.summaryChatGpt.post_and_get_streaming_answer(conversation, _parameters,
+                                                                                    full_history)
                 answer = ''
                 answer_head = """  \n## 第{0}部分摘要 {1:.2%}  \n\n\n""".format(cnt + 1, float(
                     large_inputs_tokens - remain_tokens) / large_inputs_tokens).replace('\n\n\n',
@@ -466,10 +471,10 @@ async def rolling_summary(large_inputs, full_history, summary_method, summary_op
 
         summary_history = '空的清單'
         this_system_tokens = estimate_used_tokens(_system_prompt) + estimate_used_tokens('system',
-                                                                                         model_name=summaryChatGpt.API_MODEL) + 4
+                                                                                         model_name=cxt.summaryChatGpt.API_MODEL) + 4
         this_final_tokens = estimate_used_tokens(_final_prompt) + estimate_used_tokens('system',
-                                                                                       model_name=summaryChatGpt.API_MODEL) + 4
-        available_tokens = summaryChatGpt.MAX_TOKENS - this_system_tokens - 4 - 2
+                                                                                       model_name=cxt.summaryChatGpt.API_MODEL) + 4
+        available_tokens = cxt.summaryChatGpt.MAX_TOKENS - this_system_tokens - 4 - 2
         this_summary_tokens = estimate_used_tokens(summary_history)
         this_available_tokens = (available_tokens - 2 * this_summary_tokens) * 0.667 - 100
 
@@ -495,7 +500,7 @@ async def rolling_summary(large_inputs, full_history, summary_method, summary_op
         for k in range(len(return_values)):
             # handle process fail
             if isinstance(return_values[k], str) and 'Error' in return_values[k]:
-                _parameters = copy.deepcopy(summaryChatGpt.API_PARAMETERS)
+                _parameters = copy.deepcopy(cxt.summaryChatGpt.API_PARAMETERS)
                 _parameters['temperature'] = 0.001
                 _parameters['presence_penalty'] = 1.2
                 passage = "輸入文字內容:\n\n\"\"\"\n\n{0}\n\n\"\"\"\n\n".format(summary_repository[k]['text'])
@@ -510,17 +515,18 @@ async def rolling_summary(large_inputs, full_history, summary_method, summary_op
                     }
                 ]
 
-                summaryChatGpt.make_response()
-                payload = summaryChatGpt.parameters2payload(summaryChatGpt.API_MODEL, conversation, _parameters,
-                                                            stream=False)
-                response = requests.post(summaryChatGpt.BASE_URL, headers=summaryChatGpt.API_HEADERS, json=payload,
+                cxt.summaryChatGpt.make_response()
+                payload = cxt.summaryChatGpt.parameters2payload(cxt.summaryChatGpt.API_MODEL, conversation, _parameters,
+                                                                stream=False)
+                response = requests.post(cxt.summaryChatGpt.BASE_URL, headers=cxt.summaryChatGpt.API_HEADERS,
+                                         json=payload,
                                          stream=False)
                 return_values[k] = json.loads(response.content.decode())['choices'][0]["message"]
 
         all_summary = aggregate_summary(return_values)
         is_final_stage = True
         keep_summary = False
-        available_tokens = summaryChatGpt.MAX_TOKENS - this_final_tokens - 4 - 2
+        available_tokens = cxt.summaryChatGpt.MAX_TOKENS - this_final_tokens - 4 - 2
         this_summary_tokens = 0
         this_available_tokens = (available_tokens) // 2 - 100
         large_inputs = copy.deepcopy(all_summary)
@@ -546,7 +552,7 @@ async def rolling_summary(large_inputs, full_history, summary_method, summary_op
                 }
             ]
             print(conversation)
-            streaming_answer = summaryChatGpt.post_and_get_streaming_answer(conversation, _parameters, full_history)
+            streaming_answer = cxt.summaryChatGpt.post_and_get_streaming_answer(conversation, _parameters, full_history)
             answer = ''
             answer_head = """  \n## 最終版摘要  \n{0} \n"""
             while True:
@@ -570,8 +576,8 @@ async def rolling_summary(large_inputs, full_history, summary_method, summary_op
         base_summary = copy.deepcopy(cleansed_summary)
         keep_summary = True
         this_system_tokens = estimate_used_tokens(_system_prompt) + estimate_used_tokens('system',
-                                                                                         model_name=summaryChatGpt.API_MODEL) + 4
-        available_tokens = summaryChatGpt.MAX_TOKENS - this_system_tokens - 4 - 2
+                                                                                         model_name=cxt.summaryChatGpt.API_MODEL) + 4
+        available_tokens = cxt.summaryChatGpt.MAX_TOKENS - this_system_tokens - 4 - 2
         this_summary_tokens = estimate_used_tokens(mindmap_history)
         this_available_tokens = (available_tokens - 2 * this_summary_tokens) * 0.667 - 100
         large_inputs = base_summary
@@ -601,7 +607,8 @@ async def rolling_summary(large_inputs, full_history, summary_method, summary_op
                     }
                 ]
                 print(conversation)
-                streaming_answer = summaryChatGpt.post_and_get_streaming_answer(conversation, _parameters, full_history)
+                streaming_answer = cxt.summaryChatGpt.post_and_get_streaming_answer(conversation, _parameters,
+                                                                                    full_history)
                 answer = ''
 
                 while True:
@@ -616,7 +623,7 @@ async def rolling_summary(large_inputs, full_history, summary_method, summary_op
                     keep_summary = False
 
                 mindmap_history = answer
-                available_tokens = int((summaryChatGpt.MAX_TOKENS - 200 - estimate_used_tokens(
+                available_tokens = int((cxt.summaryChatGpt.MAX_TOKENS - 200 - estimate_used_tokens(
                     answer) - this_system_tokens - 4 - 2) * 0.667)
                 cnt += 1
 
@@ -630,10 +637,10 @@ async def rolling_summary(large_inputs, full_history, summary_method, summary_op
         base_summary = copy.deepcopy(cleansed_summary)
         keep_summary = True
         this_system_tokens = estimate_used_tokens(_system_prompt) + estimate_used_tokens('system',
-                                                                                         model_name=summaryChatGpt.API_MODEL) + 4
+                                                                                         model_name=cxt.summaryChatGpt.API_MODEL) + 4
         this_final_tokens = estimate_used_tokens(_final_prompt) + estimate_used_tokens('system',
-                                                                                       model_name=summaryChatGpt.API_MODEL) + 4
-        available_tokens = summaryChatGpt.MAX_TOKENS - this_system_tokens - 4 - 2
+                                                                                       model_name=cxt.summaryChatGpt.API_MODEL) + 4
+        available_tokens = cxt.summaryChatGpt.MAX_TOKENS - this_system_tokens - 4 - 2
         this_summary_tokens = estimate_used_tokens(meeting_minutes)
         this_available_tokens = (available_tokens - 2 * this_summary_tokens) * 0.667 - 100
         large_inputs = base_summary
@@ -664,7 +671,8 @@ async def rolling_summary(large_inputs, full_history, summary_method, summary_op
                     }
                 ]
                 print(conversation)
-                streaming_answer = summaryChatGpt.post_and_get_streaming_answer(conversation, _parameters, full_history)
+                streaming_answer = cxt.summaryChatGpt.post_and_get_streaming_answer(conversation, _parameters,
+                                                                                    full_history)
                 answer = ''
                 meeting_head = '# 會議記錄'
                 while True:
@@ -679,7 +687,7 @@ async def rolling_summary(large_inputs, full_history, summary_method, summary_op
                     keep_summary = False
 
                 meeting_minutes = answer
-                available_tokens = int((summaryChatGpt.MAX_TOKENS - 200 - estimate_used_tokens(
+                available_tokens = int((cxt.summaryChatGpt.MAX_TOKENS - 200 - estimate_used_tokens(
                     answer) - this_system_tokens - 4 - 2) * 0.667)
                 cnt += 1
 
@@ -693,10 +701,10 @@ async def rolling_summary(large_inputs, full_history, summary_method, summary_op
         base_summary = copy.deepcopy(cleansed_summary)
         keep_summary = True
         this_system_tokens = estimate_used_tokens(_system_prompt) + estimate_used_tokens('system',
-                                                                                         model_name=summaryChatGpt.API_MODEL) + 4
+                                                                                         model_name=cxt.summaryChatGpt.API_MODEL) + 4
         this_final_tokens = estimate_used_tokens(_final_prompt) + estimate_used_tokens('system',
-                                                                                       model_name=summaryChatGpt.API_MODEL) + 4
-        available_tokens = summaryChatGpt.MAX_TOKENS - this_system_tokens - 4 - 2
+                                                                                       model_name=cxt.summaryChatGpt.API_MODEL) + 4
+        available_tokens = cxt.summaryChatGpt.MAX_TOKENS - this_system_tokens - 4 - 2
         this_summary_tokens = estimate_used_tokens(topic_shortcuts)
         this_available_tokens = (available_tokens - 2 * this_summary_tokens) * 0.667 - 100
         large_inputs = base_summary
@@ -726,7 +734,8 @@ async def rolling_summary(large_inputs, full_history, summary_method, summary_op
                     }
                 ]
                 print(conversation)
-                streaming_answer = summaryChatGpt.post_and_get_streaming_answer(conversation, _parameters, full_history)
+                streaming_answer = cxt.summaryChatGpt.post_and_get_streaming_answer(conversation, _parameters,
+                                                                                    full_history)
                 answer = ''
 
                 while True:
@@ -740,7 +749,7 @@ async def rolling_summary(large_inputs, full_history, summary_method, summary_op
                 if len(large_inputs) == 0:
                     keep_summary = False
                 topic_shortcuts = answer
-                available_tokens = int((summaryChatGpt.MAX_TOKENS - 200 - estimate_used_tokens(
+                available_tokens = int((cxt.summaryChatGpt.MAX_TOKENS - 200 - estimate_used_tokens(
                     topic_shortcuts) - this_system_tokens - 4 - 2) * 0.667)
                 cnt += 1
 
@@ -753,12 +762,12 @@ def estimate_tokens(text, text2, state):
     text = '' if text is None else text
     text2 = '' if text2 is None else text2
     t1 = '輸入文本長度為{0},預計耗用tokens數為:{1}'.format(len(text),
-                                                           estimate_used_tokens(text, summaryChatGpt.API_MODEL) + 4)
+                                                           estimate_used_tokens(text, cxt.summaryChatGpt.API_MODEL) + 4)
     if len(text2) == 0:
         return t1, state
     else:
         t2 = '輸出文本長度為{0},預計耗用tokens數為:{1}'.format(len(text2), estimate_used_tokens(text2,
-                                                                                                summaryChatGpt.API_MODEL) + 4)
+                                                                                                cxt.summaryChatGpt.API_MODEL) + 4)
         return t1 + '\t\t' + t2, state
 
 
@@ -914,9 +923,9 @@ def process_audio_file(file, state, initial_prompt, need_timestamp=False):
 
 
 def clear_history():
-    FULL_HISTORY = [{"role": "system", "content": baseChatGpt.SYSTEM_MESSAGE,
-                     "estimate_tokens": estimate_used_tokens(baseChatGpt.SYSTEM_MESSAGE,
-                                                             model_name=baseChatGpt.API_MODEL)}]
+    FULL_HISTORY = [{"role": "system", "content": cxt.baseChatGpt.SYSTEM_MESSAGE,
+                     "estimate_tokens": estimate_used_tokens(cxt.baseChatGpt.SYSTEM_MESSAGE,
+                                                             model_name=cxt.baseChatGpt.API_MODEL)}]
     return [], FULL_HISTORY, FULL_HISTORY
 
 
@@ -948,19 +957,19 @@ if __name__ == '__main__':
     cancel_handles = []
     with gr.Blocks(title="Prompt is what you need!", css=advanced_css, analytics_enabled=False,
                    theme=adjust_theme()) as demo:
-        baseChatGpt = GptBaseApi(model="gpt-4-1106-preview")
-        summaryChatGpt = GptBaseApi(model="gpt-3.5-turbo-16k-0613")
-        imageChatGpt = GptBaseApi(model="gpt-4-1106-preview")
-        otherChatGpt = GptBaseApi(model="gpt-4-1106-preview")
-        state = gr.State([{"role": "system", "content": '所有內容以繁體中文書寫',
-                           "estimate_tokens": estimate_used_tokens('所有內容以繁體中文書寫',
-                                                                   model_name=baseChatGpt.API_MODEL)}])  # s
-        cxt.baseChatGpt = baseChatGpt
-        cxt.summaryChatGpt = summaryChatGpt
-        cxt.imageChatGpt = imageChatGpt
-        cxt.otherChatGpt = otherChatGpt
+
+        cxt.baseChatGpt = GptBaseApi(cxt.baseChatGpt) if cxt.baseChatGpt else GptBaseApi(model="gpt-4-1106-preview")
+        cxt.baseChatGpt.enable_database_query(cxt.is_db_enable)
+        cxt.summaryChatGpt = GptBaseApi(cxt.summaryChatGpt) if cxt.summaryChatGpt else GptBaseApi(
+            model="gpt-3.5-turbo-16k-0613")
+        cxt.imageChatGpt = GptBaseApi(cxt.imageChatGpt) if cxt.imageChatGpt else GptBaseApi(model="gpt-4-1106-preview")
+        cxt.otherChatGpt = GptBaseApi(cxt.otherChatGpt) if cxt.otherChatGpt else GptBaseApi(model="gpt-4-1106-preview")
+        state = gr.State(eval(cxt.state)) if cxt.state else gr.State(
+            [{"role": "system", "content": '所有內容以繁體中文書寫',
+              "estimate_tokens": estimate_used_tokens('所有內容以繁體中文書寫',
+                                                      model_name=cxt.baseChatGpt.API_MODEL)}])
         cxt.state = state
-        baseChatGpt.FULL_HISTORY = state.value
+        cxt.baseChatGpt.FULL_HISTORY = cxt.state.value
         gr.HTML(title)
 
         with gr.Tabs():
@@ -1113,7 +1122,7 @@ if __name__ == '__main__':
         cancel_handles.append(inputs_event)
         inputs_event.then(reset_context, [], [context_type]).then(reset_textbox, [], [inputs])
         b1_event = b1.click(prompt_api, [inputs, context_type, top_p, temperature, top_k, frequency_penalty, state],
-                            [chatbot, state, history_viewer])
+                            [chatbot, cxt.state, history_viewer])
         cancel_handles.append(b1_event)
         b1_event.then(reset_context, [], [context_type]).then(reset_textbox, [], [inputs])
         b3.click(clear_history, [], [chatbot, state, history_viewer]).then(reset_textbox, [], [inputs])
@@ -1195,10 +1204,10 @@ if __name__ == '__main__':
 
         invisible_whisper_text.change(update_rolling_state, [whisper_state], [large_inputs, rolling_history_viewer])
 
-        dropdown_api1.change(lambda x: baseChatGpt.change_model(x), [dropdown_api1], [])
-        dropdown_api2.change(lambda x: summaryChatGpt.change_model(x), [dropdown_api2], [])
-        dropdown_api3.change(lambda x: otherChatGpt.change_model(x), [dropdown_api3], [])
-        dropdown_api4.change(lambda x: imageChatGpt.change_model(x), [dropdown_api4], [])
+        dropdown_api1.change(lambda x: cxt.baseChatGpt.change_model(x), [dropdown_api1], [])
+        dropdown_api2.change(lambda x: cxt.summaryChatGpt.change_model(x), [dropdown_api2], [])
+        dropdown_api3.change(lambda x: cxt.otherChatGpt.change_model(x), [dropdown_api3], [])
+        dropdown_api4.change(lambda x: cxt.imageChatGpt.change_model(x), [dropdown_api4], [])
 
         gr.Markdown(description)
 

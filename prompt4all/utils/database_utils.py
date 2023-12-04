@@ -1,6 +1,3 @@
-
-
-
 def parse_connection_string(conn_string: str) -> dict:
     """
     解析數據庫連接字串，從中提取用戶名稱、密碼、伺服器名稱、資料庫名稱及其他參數。
@@ -20,31 +17,31 @@ def parse_connection_string(conn_string: str) -> dict:
 
     """
     results = {}
+    if conn_string:
+        # 分割字符串來提取用戶名稱、密碼、伺服器名稱、資料庫名稱和其他參數
+        parts = conn_string.split('://')
+        credentials_and_server_info = parts[1].split('@')
 
-    # 分割字符串來提取用戶名稱、密碼、伺服器名稱、資料庫名稱和其他參數
-    parts = conn_string.split('://')
-    credentials_and_server_info = parts[1].split('@')
+        # 處理認證信息
+        if ':' in credentials_and_server_info[0]:
+            username, password = credentials_and_server_info[0].split(':')
+            results['user_name'] = username
+            results['password'] = password
 
-    # 處理認證信息
-    if ':' in credentials_and_server_info[0]:
-        username, password = credentials_and_server_info[0].split(':')
-        results['user_name'] = username
-        results['password'] = password
+        server_and_database_info = credentials_and_server_info[1].split('/')
+        results['server_name'] = server_and_database_info[0]
+        database_and_parameters = server_and_database_info[1].split('?')
 
-    server_and_database_info = credentials_and_server_info[1].split('/')
-    results['server_name'] = server_and_database_info[0]
-    database_and_parameters = server_and_database_info[1].split('?')
+        results['database_name'] = database_and_parameters[0]
 
-    results['database_name'] = database_and_parameters[0]
-
-    # 處理其他參數
-    if len(database_and_parameters) > 1:
-        parameters = database_and_parameters[1].split('&')
-        for p in parameters:
-            try:
-                key, value = p.split('=')
-                results[key] = value
-            except:
-                pass
+        # 處理其他參數
+        if len(database_and_parameters) > 1:
+            parameters = database_and_parameters[1].split('&')
+            for p in parameters:
+                try:
+                    key, value = p.split('=')
+                    results[key] = value
+                except:
+                    pass
 
     return results
