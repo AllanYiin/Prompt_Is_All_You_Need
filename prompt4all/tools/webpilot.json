@@ -1,0 +1,43 @@
+{
+  "type": "function",
+  "function": {
+    "name": "webpage_reader",
+    "description": "visit web page",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "link": {
+          "type": "string",
+          "description": "The web page's url to visit and retrieve content from"
+        },
+        "ur": {
+          "type": "string",
+          "description": "a clear statement of the user's request, can be used as a search query and may include search operators."
+        },
+        "l": {
+          "type": "string",
+          "description": "the language used by the user in the request, according to the ISO 639-1 standard. For Chinese, use zh-CN for Simplified Chinese and zh-TW for Traditional Chinese"
+        },
+        "it": {
+          "type": "string",
+          "description": "Information extraction types: news, table, profile, commodity, prices...."
+        },
+        "lp": {
+          "type": "boolean",
+          "description": "Whether the link is directly provided by the user"
+        },
+        "rt": {
+          "type": "boolean",
+          "description": "If the last request doesn't meet user's need, set this to true when trying to retry another request"
+        }
+      },
+      "required": [
+        "link",
+        "ur",
+        "l",
+        "lp",
+        "it"
+      ]
+    }
+  }
+}

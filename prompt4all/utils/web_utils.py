@@ -233,6 +233,18 @@ def search_answer(query: str):
     return memo
 
 
+def search_web(url: str):
+    headers = {
+        'User-Agent': random.choice(user_agents)}
+    session = requests.Session()
+    session.headers.update(headers)
+    response = session.get(url, headers=headers)
+    soup = BeautifulSoup(response.text, 'html.parser')
+    [data.decompose() for data in soup(['style', 'script'])]
+    content = ' '.join(soup.stripped_strings)
+    return content
+
+
 def parse_html(html: str) -> str:
     soup = BeautifulSoup(html.replace('</p>', '/n</p>')
                          .replace('<h1>', '<h1># ')
