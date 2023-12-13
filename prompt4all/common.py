@@ -1,7 +1,8 @@
 import socket
 from typing import List, Union
 import numpy as np
-__all__ = ["find_available_port","unpack_singleton"]
+
+__all__ = ["find_available_port", "unpack_singleton"]
 
 
 def find_available_port(priority: Union[int, List[int]] = None) -> int:
@@ -35,6 +36,7 @@ def find_available_port(priority: Union[int, List[int]] = None) -> int:
         s.bind(('', 0))
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         return s.getsockname()[1]
+
 
 def unpack_singleton(x):
     if x is None:

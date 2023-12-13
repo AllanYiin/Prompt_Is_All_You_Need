@@ -50,6 +50,10 @@ def adjust_theme():
             button_shadow="none",
             button_shadow_hover="*shadow_drop_lg",
             button_shadow_active="*shadow_inset",
+            border_color_primary='#c5c5d2',
+            button_large_padding='6px 12px',
+            body_text_color_subdued='#484848',
+            background_fill_secondary='#eaeaea',
             input_shadow="0 0 0 *shadow_spread transparent, *shadow_inset",
             input_shadow_focus="0 0 0 *shadow_spread *secondary_50, *shadow_inset",
             input_shadow_focus_dark="0 0 0 *shadow_spread *neutral_700, *shadow_inset",
@@ -142,9 +146,30 @@ advanced_css = """
 #db_setting_panel{
     background-color: rgba(69,157,186,0.8);
 }
+.instructions_text {
+    max-height: 20%;
+    overflow-y: scroll;
+}
+
+.screen_container {
+    max-height: 100%;
+}
+
+.scroll-hide::-webkit-scrollbar {
+width: 1em;
+}
+
+.assistants_files {
+    flex-direction: column;
+    flex-grow: 1;
+    overflow-y: scroll;
+}
+
 #rolling_file {height: 75px;}
 #component-0 { height: 100%; }
-#chatbot { flex-grow: 1; }
+#chatbot { 
+flex-grow: 1; 
+}
 
 /* 设置表格的外边距为1em，内部单元格之间边框合并，空单元格显示. */
 .markdown-body table {

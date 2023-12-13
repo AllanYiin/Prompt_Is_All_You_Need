@@ -92,6 +92,26 @@ def make_dir_if_need(path):
     return sanitize_path(path)
 
 
+def is_instance(instance, check_class):
+    if not inspect.isclass(instance) and inspect.isclass(check_class):
+        mro_list = [b.__module__ + '.' + b.__qualname__ for b in instance.__class__.__mro__]
+        return check_class.__module__ + '.' + check_class.__qualname__ in mro_list
+    elif inspect.isclass(instance) and isinstance(check_class, str):
+        mro_list = [b.__module__ + '.' + b.__qualname__ for b in instance.__mro__]
+        mro_list2 = [b.__qualname__ for b in instance.__mro__]
+        return check_class in mro_list or check_class in mro_list2
+    elif not inspect.isclass(instance) and isinstance(check_class, str):
+        mro_list = [b.__module__ + '.' + b.__qualname__ for b in instance.__class__.__mro__]
+        mro_list2 = [b.__qualname__ for b in instance.__class__.__mro__]
+        return check_class in mro_list or check_class in mro_list2
+    elif isinstance(check_class, tuple):
+        return any([is_instance(instance, cc) for cc in check_class])
+    else:
+        if not inspect.isclass(check_class):
+            print(red_color('Input check_class {0} should a class, but {1}'.format(check_class, type(check_class))))
+        return False
+
+
 def PrintException():
     """
         Print exception with the line_no.
@@ -190,6 +210,7 @@ class _Context:
         self.numpy_print_format = '{0:.4e}'
         self.plateform = None
         self.whisper_model = None
+        self.assistants = []
 
         if os.path.exists(os.path.join(self.get_prompt4all_dir(), 'session.json')):
             self.load_session(os.path.join(self.get_prompt4all_dir(), 'session.json'))
@@ -311,7 +332,7 @@ class _Context:
                 session.pop('sql_engine')
 
                 session.pop('print')
-
+                session['assistants'] = [a.json() if is_instance(a, "Assistant") else a for a in self.assistants]
                 session['baseChatGpt'] = self.baseChatGpt if isinstance(self.baseChatGpt,
                                                                         str) else self.baseChatGpt.api_model if self.baseChatGpt else None
                 session['summaryChatGpt'] = self.summaryChatGpt if isinstance(self.summaryChatGpt,
@@ -338,6 +359,8 @@ class _Context:
                     for k, v in _session.items():
                         try:
                             self.__setattr__(k, v)
+
+
                         except Exception as e:
                             print(e)
             except ValueError as ve:
