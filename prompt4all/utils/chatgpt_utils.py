@@ -12,9 +12,9 @@ from prompt4all.utils.tokens_utils import *
 from prompt4all.utils.regex_utils import *
 from prompt4all.utils.pdf_utils import *
 from prompt4all.common import *
-__all__ = ['process_chat','process_url','process_context','build_message','regular_txt_to_markdown','get_next_paragraph']
 
-
+__all__ = ['process_chat', 'process_url', 'process_context', 'build_message', 'regular_txt_to_markdown',
+           'get_next_paragraph']
 
 
 def regular_txt_to_markdown(text):
@@ -23,23 +23,24 @@ def regular_txt_to_markdown(text):
     text = text.replace('\n\n\n', '\n\n')
     return text
 
+
 def process_chat(conversation_dict: dict):
     if conversation_dict['role'] == 'user':
-        return '👨:\n' + regular_txt_to_markdown(conversation_dict['content']) + "\n"
+        return regular_txt_to_markdown(conversation_dict['content']) + "\n"
     elif conversation_dict['role'] == 'assistant':
-        return '🤖:\n' + regular_txt_to_markdown(conversation_dict['content'])+ "\n"
+        return regular_txt_to_markdown(conversation_dict['content']) + "\n"
     elif conversation_dict['role'] == 'system':
-        return '💡:\n' + conversation_dict['content'] + "\n"
+        return conversation_dict['content'] + "\n"
 
 
 def extract_urls_text(text):
     url_pattern = regex.compile(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+')
     urls = regex.findall(url_pattern, text)
-    if len(urls)==0:
+    if len(urls) == 0:
         return text
     else:
-        text_type,url_text=process_url(urls[0])
-        all_text=text_type+'內容: '+url_text+'\n'+text.replace(urls[0],text_type+'內容')
+        text_type, url_text = process_url(urls[0])
+        all_text = text_type + '內容: ' + url_text + '\n' + text.replace(urls[0], text_type + '內容')
 
         return all_text
 
@@ -57,7 +58,7 @@ def process_url(url):
 
         text_type = '網頁文字'
     elif 'application/pdf' in content_type:
-        page_map=get_document_text
+        page_map = get_document_text
         import PyPDF2
         with io.BytesIO(response.content) as pdf_file:
             pdf_reader = PyPDF2.PdfReader(pdf_file)
@@ -83,9 +84,7 @@ def process_url(url):
     return text_type, text
 
 
-
-
-def build_message(role,content):
+def build_message(role, content):
     """
     Build a chat message with the given role and content.
 
@@ -99,8 +98,10 @@ def build_message(role,content):
     return {"role": str(role), "content": str(content)}
 
 
-def process_context(prompt, context_type,history: list):
-    message_context = [build_message(message['role'],message['summary'] if message['role'] == 'assistant' and 'summary' in message else message['content']) for message in history]
+def process_context(prompt, context_type, history: list):
+    message_context = [build_message(message['role'],
+                                     message['summary'] if message['role'] == 'assistant' and 'summary' in message else
+                                     message['content']) for message in history]
     message_context.append({"role": "user", "content": extract_urls_text(prompt)})
     return message_context
 
@@ -127,11 +128,11 @@ SENTENCE_SEARCH_LIMIT = 100
 SECTION_OVERLAP = 100
 
 
-
 def split_text(page_map):
     SENTENCE_ENDINGS = [".", "!", "?"]
     WORDS_BREAKS = [",", ";", ":", " ", "(", ")", "[", "]", "{", "}", "\t", "\n"]
-    #if args.verbose: print(f"Splitting '{filename}' into sections")
+
+    # if args.verbose: print(f"Splitting '{filename}' into sections")
 
     def find_page(offset):
         l = len(page_map)
@@ -191,11 +192,13 @@ def split_text(page_map):
     if start + SECTION_OVERLAP < end:
         yield (all_text[start:end], find_page(start))
 
-def blob_name_from_file_page(filename, page = 0):
+
+def blob_name_from_file_page(filename, page=0):
     if os.path.splitext(filename)[1].lower() == ".pdf":
         return os.path.splitext(os.path.basename(filename))[0] + f"-{page}" + ".pdf"
     else:
         return os.path.basename(filename)
+
 
 def create_sections(filename, page_map):
     for i, (section, pagenum) in enumerate(split_text(page_map)):
@@ -207,10 +210,8 @@ def create_sections(filename, page_map):
         }
 
 
-
 # def split_large_content(large_inputs):
 #     partial_large_inputs=large_inputs.split()
-
 
 
 def get_next_paragraph(paragraphs, max_tokens):
@@ -219,8 +220,8 @@ def get_next_paragraph(paragraphs, max_tokens):
     result = []
     current_tokens = 0
     for paragraph in paragraphs:
-        tokens =estimate_used_tokens(paragraph)
-        if paragraph==paragraphs[-1]:
+        tokens = estimate_used_tokens(paragraph)
+        if paragraph == paragraphs[-1]:
             result.append(paragraph)
             current_tokens += tokens + 1
             paragraphs_bk.pop(0)
@@ -231,6 +232,3 @@ def get_next_paragraph(paragraphs, max_tokens):
             current_tokens += tokens + 1
             paragraphs_bk.pop(0)
     return result, paragraphs_bk
-
-
-

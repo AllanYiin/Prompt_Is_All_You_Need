@@ -45,6 +45,7 @@ from prompt4all import context
 from prompt4all.context import *
 from prompt4all.common import find_available_port
 from prompt4all.ui import settings_ui, rewrite_ui, image_ui, nlu_ui, assistant_ui, chatbot_ui, summarization_ui
+from openai import OpenAI, AsyncOpenAI, AzureOpenAI
 
 os.chdir(os.path.dirname(__file__))
 cxt = context._context()
@@ -225,6 +226,7 @@ if __name__ == '__main__':
                                                                  col_count=(1, 'fixed'), interactive=True)
                     with gr.Column(scale=3):
                         chatbot = gr.Chatbot(elem_id='chatbot', container=True, height=550,
+                                             avatar_images=["images/avatar/human.png", "images/avatar/assistant.png"],
                                              render_markdown=True,
                                              show_copy_button=True, bubble_full_width=True, show_share_button=True,
                                              likeable=True,
@@ -245,6 +247,7 @@ if __name__ == '__main__':
                 summarization_ui.summerization_panel()
             with gr.TabItem("設定"):
                 with gr.Column():
+                    settings_ui.service_type_panel()
                     dropdown_api1 = gr.Dropdown(choices=[k for k in model_info.keys()], value="gpt-4-1106-preview",
                                                 label="對話使用之api", interactive=True)
                     dropdown_api4 = gr.Dropdown(choices=[k for k in model_info.keys()], value="gpt-4-1106-preview",
