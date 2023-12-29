@@ -1,16 +1,19 @@
 {
-  "name": "query_sql",
-  "description": "Translate the user’s query to the database or the request to get some aggregate data into T-SQL, then execute it and return the result.",
-  "parameters": {
-    "type": "object",
-    "properties": {
-      "query_intent": {
-        "type": "string",
-        "description": "The full snippet of the user’s input message regarding the need to query the database or get some summary data"
-      }
-    },
-    "required": [
-      "query_intent"
-    ]
+  "type": "function",
+  "function": {
+    "name": "query_sql",
+    "description": "Translate the user’s query to the database or the request to get some aggregate data into T-SQL, then execute it and return the result.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "query_intent": {
+          "type": "string",
+          "description": "The full snippet of the user’s input message regarding the need to query the database or get some summary data"
+        }
+      },
+      "required": [
+        "query_intent"
+      ]
+    }
   }
 }
