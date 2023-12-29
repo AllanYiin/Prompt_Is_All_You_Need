@@ -1,0 +1,28 @@
+{
+  "type": "function",
+  "function": {
+    "name": "generate_diagram",
+    "description": "Need to generate diagram as representations of concepts or knowledge",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "di": {
+          "type": "string",
+          "description": "Full snippet on the need to present concepts in the form of a diagram"
+        },
+        "dt": {
+          "type": "string",
+          "description": "Type of diagram:flowchart, mindmap"
+        },
+        "ss": {
+          "type": "string",
+          "description": "md syntax for build a diagam"
+        }
+      },
+      "required": [
+        "di",
+        "dt"
+      ]
+    }
+  }
+}
