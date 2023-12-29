@@ -4,11 +4,17 @@ import re
 import random
 import time
 import uuid
+import numpy as np
 from collections import OrderedDict
 from urllib.parse import urlencode, unquote
 import markdownify
+from scipy.ndimage import gaussian_filter
 import requests
 from bs4 import BeautifulSoup
+from prompt4all.common import *
+from prompt4all.utils.text_utils import seg_as_sentence
+
+__all__ = ["search_google", "search_bing"]
 
 # import chromedriver_binary
 # from selenium import webdriver
@@ -147,32 +153,42 @@ def search_google(query: str) -> list:
         - 函數捕獲網頁內容，然後從 HTML 中提取相關的標題、鏈接和摘要信息。
         - 如果搜索無結果或發生連接錯誤，將返回空清單。
     """
-    query = urlencode({"q": query.replace(' ', '+')}).replace('%2B', '+')
+    if 'https://www.google.com/search' in query:
+        search_url = query
+    else:
+        query = urlencode({"q": query.replace(' ', '+')}).replace('%2B', '+')
+        search_url = f"https://www.google.com/search?{query}"
+
     headers = {
         'User-Agent': random.choice(user_agents)}
 
-    search_url = f"https://www.google.com/search?{query}"
     session = requests.Session()
     response = session.get(search_url, headers=headers)
     soup = BeautifulSoup(response.content, 'html.parser')
 
-    search_results = []
+    search_results = {}
+    total_words = len(soup.text)
 
-    results = soup.find_all('div')
-    results = [r for r in results if 'egMi0 kCrYT' in str(r)]
+    def no_div_children(tag):
+        return tag.name == 'div' and 0.2 > float(len(tag.text)) / total_words > 0.02 and tag.find_all(
+            'h3') and len(tag.find_all('a', href=True)) == 1
+
+    results = soup.find_all(no_div_children)
     for r in results:
         part = BeautifulSoup(str(r), 'html.parser')
-        link = part.find_all('div', class_='egMi0 kCrYT')
-        if len(link) == 1:
-            link = [
-                [k.split('=')[-1] for k in t2.contents[0].attrs['href'].split('?')[-1].split('&') if
-                 k.startswith('url')][0]
-                for t2 in link][0]
-            title = part.find_all('div', class_='BNeawe vvjwJb AP7Wnd UwRFLe')[0].text
-            snippet_text = part.find_all('div', class_='BNeawe s3v9rd AP7Wnd')
-            if len(snippet_text) > 0:
-                snippet_text = snippet_text[0].text
-                search_results.append({'title': title, 'link': link, 'snippet': snippet_text})
+        links = part.find_all('a', href=True)
+        if len(links) == 1:
+            link = links[0]['href']
+            title = part.find_all('h3')[0].text
+            snippet_text0 = part.span.text
+            part.span.extract()
+            snippet_text = part.get_text(strip=True).replace(snippet_text0, '')
+            if link not in search_results:
+                search_results[link] = {'title': title, 'url': link, 'summary': snippet_text}
+            else:
+                if len(snippet_text) > len(search_results[link]['summary']):
+                    search_results[link] = {'title': title, 'url': link, 'summary': snippet_text}
+            # search_results.append({'title': title, 'url': link, 'summary': snippet_text})
 
     # links = soup.find_all('div', class_='egMi0 kCrYT')
     #
@@ -186,8 +202,8 @@ def search_google(query: str) -> list:
     #     href = links[i]
     #     snippet_text = snippet_texts[i]
     #     search_results.append({'title': title, 'link': href, 'snippet': snippet_text})
-    search_results = list(set([str(s) for s in search_results]))
-    search_results = [eval(s) for s in search_results]
+    search_results = list(search_results.values())
+    search_results = {'webpage_list': search_results}
     return search_results, session
 
 
@@ -296,7 +312,7 @@ def search_webpilot(url: str, *args, **kwargs) -> str:
     Returns:
 
     Examples:
-        >>> search_webpilot("https://zhuanlan.zhihu.com/p/626966526")
+        >>> search_webpilot("https://www.businesstoday.com.tw/article/category/80394/post/202104150009/")
         []
 
     """
@@ -308,14 +324,21 @@ def search_webpilot(url: str, *args, **kwargs) -> str:
 
     data = {
         "link": url,
-        'user_has_request': False
+        "ur": "search",
+        "l": 'zh-TW',
+        "lp": True,
+        "rt": False
     }
     endpoint = "https://webreader.webpilotai.com/api/visit-web"
     resp = requests.post(endpoint, headers=header, json=data)
 
     logging.debug("webpilot resp: {}".format(resp.json()))
+    # temp = resp.json()
+    # if 'content' in temp:
+    #     temp['content'] = cleasing_web_text(temp['content'])
 
     return json.dumps(resp.json(), ensure_ascii=False)
+
 
 # def parse_xml(xml: str) -> etree._Element:
 #     return etree.fromstring(xml)
@@ -332,3 +355,114 @@ def search_webpilot(url: str, *args, **kwargs) -> str:
 #             logger.error("处理摘要任务超时")
 #         except Exception as e:
 #             logger.error("在提取摘要过程
+
+
+def second_derivative(x):
+    return np.gradient(np.gradient(x))
+
+
+def cleasing_web_text(text: str):
+    """
+
+    Args:
+        url:
+        *args:
+        **kwargs:
+
+    Returns:
+
+    Examples:
+        >>> cleasing_web_text(eval(search_webpilot("https://www.businesstoday.com.tw/article/category/80394/post/202104150009/"))['content'])
+        []
+
+    """
+
+    lines = []
+    is_valuable = []
+    for t in text.replace(' ', '\n\n').split('\n'):
+        if len(t) > 300:
+            ss = seg_as_sentence(t)
+            lines.extend(ss)
+            is_valuable.extend([1] * len(ss))
+        elif len(t) > 0:
+            lines.append(t)
+            is_valuable.append(0)
+
+    is_valuable = np.array(is_valuable)
+    text_lens = np.array([len(t) for t in lines])
+    total_words = np.array(text_lens).sum()
+    freq = {}
+    for t in lines:
+        if len(t) > 0:
+            if len(t) not in freq:
+                freq[len(t)] = 0
+            freq[len(t)] += 1
+    sorted_freq = sorted(freq.items(), key=lambda kv: (kv[0], kv[1]), reverse=True)
+    sorted_freq = {k: v for k, v in sorted_freq}
+    keys = list(sorted_freq.keys())
+    remain_text = total_words
+    current_len = None
+    need_check = True
+    while remain_text > 0.05 * total_words and (current_len is None or current_len > 10) and need_check:
+        this_len = keys.pop(0)
+        match_cnt = len(text_lens[text_lens == this_len])
+        if match_cnt == 1:
+            is_valuable[text_lens == this_len] = 1
+            remain_text -= this_len
+        else:
+            if current_len and this_len / current_len > 0.5:
+                is_valuable[text_lens == this_len] = 1
+                remain_text -= this_len * match_cnt
+            elif current_len and this_len / current_len < 0.5:
+                need_check = False
+        current_len = this_len
+
+    results = []
+    in_valid_zone = False
+    partial_words = ''
+    for idx in range(len(lines)):
+        t = lines[idx]
+        check = is_valuable[idx]
+        if check == 1:
+            if not in_valid_zone:
+                in_valid_zone = True
+            if len(partial_words) == 0:
+                partial_words = t
+            else:
+                partial_words += '\n\n' + t
+            if len(partial_words) > 100:
+                results.append(partial_words)
+                print(green_color(partial_words), flush=True)
+                partial_words = ''
+        else:
+            if in_valid_zone:
+                if (idx > 0 and is_valuable[idx - 1] == 1) or (idx < len(lines) - 1 and is_valuable[idx + 1] == 1):
+                    if len(partial_words) > 20:
+                        results.append(partial_words)
+                        print(green_color(partial_words), flush=True)
+                    partial_words = t
+            else:
+                print(magenta_color(t), flush=True)
+    return results
+
+# def cleasing_web_text(text: str):
+#     lines = text.replace(' ', '\n\n').split('\n')
+#     text_lens = [len(t) for t in lines if len(t) > 0]
+#     freq = {}
+#     for t in lines:
+#         if len(t) > 0:
+#             if len(t) not in freq:
+#                 freq[len(t)] = 0
+#             freq[len(t)] += len(t)
+#     sorted_freq = sorted(freq.items(), key=lambda kv: (kv[1], kv[0]), reverse=True)
+#     sorted_freq = {k: v for k, v in sorted_freq}
+#     total_words = np.array(text_lens).sum()
+#     keys = np.array(list(sorted_freq.keys()))
+#     text_lens_ratio = np.array(list(sorted_freq.values())) / total_words
+#     text_lens_accu_ratio = np.array([text_lens_ratio[:i + 1].sum() for i in range(len(sorted_freq))])
+#     x_array = np.array([sorted_freq[k] / k / len(text_lens) for k in keys])
+#     accu_x_array = np.array([x_array[:i + 1].sum() for i in range(len(sorted_freq))])
+#     slop_array = text_lens_accu_ratio / accu_x_array
+#     slop_array_1 = np.array(
+#         [slop_array[i] - slop_array[i - 1] if i > 0 else slop_array[i] for i in range(len(slop_array))])
+#     return text_lens_accu_ratio

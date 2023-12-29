@@ -8,7 +8,7 @@
       "properties": {
         "link": {
           "type": "string",
-          "description": "The web page's url to visit and retrieve content from"
+          "description": "The URL to search, if not provided by the user.  'https://www.google.com/search?q=keyword1+keyword2' is a good choice."
         },
         "ur": {
           "type": "string",
@@ -20,7 +20,7 @@
         },
         "it": {
           "type": "string",
-          "description": "Information extraction types: news, table, profile, commodity, prices...."
+          "description": "Information extraction types: research (data driven),knowledge(descriptive),news, table, profile, commodity, prices...."
         },
         "lp": {
           "type": "boolean",
@@ -29,14 +29,18 @@
         "rt": {
           "type": "boolean",
           "description": "If the last request doesn't meet user's need, set this to true when trying to retry another request"
+        },
+        "lv": {
+          "type": "integer",
+          "description": "The search depth"
         }
       },
       "required": [
         "link",
         "ur",
         "l",
-        "lp",
-        "it"
+        "it",
+        "lp"
       ]
     }
   }
