@@ -42,8 +42,24 @@ def webpage_reader(link: str, ur: str, l: str, it: str, lp: bool = False, rt: bo
     results = ""
     returnData = OrderedDict()
 
-    def process_browse(_url, _title):
-        new_results = webpage_reader(link=_url, ur=ur, l=l, it=it, lp=False, rt=True, lv=lv + 1, memo=_title)
+    def process_browse(_url, _title, returnData):
+        new_results, title, status_code = web_utils.search_web(_url)
+        if status_code != 200:
+            new_results = webpage_reader(link=_url, ur=ur, l=l, it=it, lp=False, rt=True, lv=lv + 1, memo=_title)
+        else:
+            if new_results and len(new_results) > 0:
+                part_id = uuid.uuid4()
+                save_knowledge_base(part_id=part_id, text_content=title, parent_id=None, ordinal=None, is_rewrite=0,
+                                    source_type=1,
+                                    url=_url,
+                                    raw=new_results)
+                if len(new_results) > 200:
+                    parts = web_utils.cleasing_web_text(new_results)
+                    for r in range(len(parts)):
+                        this_text = parts[r]
+                        save_knowledge_base(part_id=uuid.uuid4(), text_content=this_text, parent_id=part_id,
+                                            ordinal=r + 1, is_rewrite=0, source_type=1,
+                                            url=_url, raw=None)
         returnData[_url] = new_results
 
     header = {
@@ -53,8 +69,7 @@ def webpage_reader(link: str, ur: str, l: str, it: str, lp: bool = False, rt: bo
     if 'www.statista.com' in link and lv == 0:
         link = 'https://www.google.com/search?' + urlencode({"q": ur.replace(' ', '+')}).replace('%2B', '+')
 
-    if ur and lv == 0:
-
+    if ur and lv == 0 and link is None:
         search_lists = better_search(ur)
         threads = []
         for i in range(len(search_lists['webpage_list'])):
@@ -75,113 +90,105 @@ def webpage_reader(link: str, ur: str, l: str, it: str, lp: bool = False, rt: bo
             results = results + '\n\n' + k + '\n\n' + v
     elif 'https://www.google.com/search' in link:
         search_lists, _ = web_utils.search_google(link)
-        threads = []
-        for i in range(len(search_lists['webpage_list'])):
-            item = search_lists['webpage_list'][i]
-            if 'url' in item:
-                _url = item['url']
-                _title = item['title']
-                threads.append(threading.Thread(target=process_browse, args=(_url, _title)))
-                threads[i].start()
-        for i in range(len(threads)):
-            threads[i].join()
-        while len(returnData) < len(threads):
-            time.sleep(1)
-        for k, v in returnData.items():
-            results = results + '\n\n' + k + '\n\n' + v
+        return json.dumps(search_lists, ensure_ascii=False)
+        # threads = []
+        # for i in range(len(search_lists['webpage_list'])):
+        #     item = search_lists['webpage_list'][i]
+        #     if 'url' in item:
+        #         _url = item['url']
+        #         _title = item['title']
+        #         threads.append(threading.Thread(target=process_browse, args=(_url, _title, returnData)))
+        #         threads[i].start()
+        # for i in range(len(threads)):
+        #     threads[i].join()
+        # while len([k for k, v in returnData.items()]) < len(threads):
+        #     time.sleep(1)
+        # for k, v in returnData.items():
+        #     if v and len(v) > 0:
+        #         results = results + '\n\n' + k + '\n\n' + v
+    elif 'https://www.bing.com/search' in link:
+        search_lists, _ = web_utils.search_bing(link)
+        return json.dumps(search_lists, ensure_ascii=False)
     else:
-        part_id = uuid.uuid4()
-        data = {
-            "link": link,
-            "ur": ur,
-            "l": l,
-            "lp": lp,
-            "rt": rt
-        }
 
-        cxt.status_word = '查詢{0}中...'.format(link)
-        print(data, 'it:' + it)
-        endpoint = "https://webreader.webpilotai.com/api/visit-web"
-        resp = requests.post(endpoint, headers=header, data=json.dumps(data))
-        resp = eval(resp.text)
-        title = memo if memo else resp['meta']['og:title'] if 'meta' in resp else None
+        new_results, title, status_code = web_utils.search_web(_url)
+        if status_code != 200 or new_results is None or len(new_results) < 200:
+            part_id = uuid.uuid4()
+            data = {
+                "link": link,
+                "ur": ur,
+                "l": l,
+                "lp": lp,
+                "rt": rt
+            }
 
-        if (lv > 0 or lp) and 'content' in resp:
+            cxt.status_word = '查詢{0}中...'.format(link)
+            print(data, 'it:' + it)
+            endpoint = "https://webreader.webpilotai.com/api/visit-web"
+            resp = requests.post(endpoint, headers=header, data=json.dumps(data))
+            if resp.status_code != 200:
+                print('ERROR', resp.status_code, link)
+                return ''
+            resp = eval(resp.text)
+            title = memo if memo else resp['meta']['og:title'] if 'meta' in resp else None
+
+            if 'content' not in resp:
+                new_results = 'No content'
+            else:
+                new_results = resp['content']
+
+        if it == 'news':
+            title = title if title else ur
+            new_results = get_news_list(title, new_results)
+        elif it in ['knowledge', 'research']:
+            pass
+        elif it == 'table':
+            new_results = get_table_list(new_results)
+        else:
+            _prompt = '請將以下網頁內容僅保留與「{0}」相關之部分。"\n"""\n{1}\n"""\n'.format(ur, new_results)
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo-1106",
+                messages=[
+                    {'role': 'system', 'content': '#zh-TW'},
+                    {'role': 'user', 'content': _prompt}
+                ],
+                temperature=0.3,
+                n=1,
+                stream=False,
+
+            )
+
+            response_message = response.choices[0].message
+            new_results = response_message.content
+        if new_results and len(new_results) > 0:
             save_knowledge_base(part_id=part_id, text_content=title, parent_id=None, ordinal=None, is_rewrite=0,
                                 source_type=1,
                                 url=link,
-                                raw=resp['content'])
-            results = resp['content']
-            if len(results) > 10:
-                parts = web_utils.cleasing_web_text(results)
-                for r in range(len(parts)):
-                    this_text = parts[r]
-                    save_knowledge_base(part_id=uuid.uuid4(), text_content=this_text, parent_id=part_id,
-                                        ordinal=r + 1, is_rewrite=0, source_type=1,
-                                        url=link, raw=None)
-                results = '\n\n'.join(parts)
-        if 'content' not in resp:
-            print('RESP', resp)
-        else:
-            if lv == 0 and ('google' in link or 'bing' in link):
-                search_lists = eval(get_search_list(ur, resp['content']))
+                                raw=new_results)
 
-                threads = []
-                for i in range(len(search_lists['webpage_list'])):
-                    item = search_lists['webpage_list'][i]
-                    if 'url' in item:
-                        _url = item['url']
-                        threads.append(threading.Thread(target=process_browse, args=(_url,)))
-                        threads[i].start()
-                for i in range(len(threads)):
-                    threads[i].join()
-                while len(returnData) < len(threads):
-                    time.sleep(1)
-                for k, v in returnData.items():
-                    results = results + '\n\n' + k + '\n\n' + v
-            elif it == 'news':
-                title = title if title else ur
-                results = get_news_list(title, resp['content'])
+        if len(new_results) > 200:
+            parts = web_utils.cleasing_web_text(results)
+            for r in range(len(parts)):
+                this_text = parts[r]
+                save_knowledge_base(part_id=uuid.uuid4(), text_content=this_text, parent_id=part_id,
+                                    ordinal=r + 1, is_rewrite=0, source_type=1,
+                                    url=link, raw=None)
+
+    # if (lv == 0) and it in ['knowledge', 'research']:
+    #     return r'以下是透過網路搜索所獲取的情報，請盡量詳實完整的輸出給使用者(你若在這階段缺漏太多篇幅過短，會對我職業生涯造成**重大傷害**!!!)\n\n"""\n#搜索到的內容    \n\n  {0}\n\n  """'.format(
+    #         results)
+    return new_results
 
 
-            elif it in ['knowledge', 'research']:
-                # results = get_knowledge_list(ur, resp['content'], l=l)
-                pass
-
-            elif it == 'table':
-                results = get_table_list(resp['content'])
-            else:
-                _prompt = '請將以下網頁內容僅保留與「{0}」相關之部分。"\n"""\n{1}\n"""\n'.format(ur, resp['content'])
-                response = client.chat.completions.create(
-                    model="gpt-3.5-turbo-1106",
-                    messages=[
-                        {'role': 'system', 'content': '#zh-TW'},
-                        {'role': 'user', 'content': _prompt}
-                    ],
-                    temperature=0.3,
-                    n=1,
-                    stream=False,
-
-                )
-
-                response_message = response.choices[0].message
-                results = response_message.content
-
-    if (lv == 0) and it in ['knowledge', 'research']:
-        return r'以下是透過網路搜索所獲取的情報，請盡量詳實完整的輸出給使用者(你若在這階段缺漏太多篇幅過短，會對我職業生涯造成**重大傷害**!!!)\n\n"""\n#搜索到的內容    \n\n  {0}\n\n  """'.format(
-            results)
-    return results
-
-
-def better_search(query_intent):
+def better_search(query_intent, keywords_cnt=3):
     _prompt = """
-    你是一個專業的網路搜索達人，你能夠根據使用者提供的搜索意圖中的關鍵概念，根據以下原則轉化為5組實際查詢的關鍵字組合(關鍵字間請用加號分隔)
+    你是一個專業的網路搜索達人，你能夠根據使用者提供的搜索意圖中的關鍵概念，根據以下原則轉化為{0}組實際查詢的關鍵字組合(以markdown Ordered Lists形式呈現，關鍵字間請用加號分隔)
      - **關鍵概念定義**：關鍵概念的細節定義釐清，若搜索意圖涉及數字，務必釐清數字所使用的單位(與金額有關皆須要確認幣別)
    - **收集背景知識**：若是數值的預估，則包括歷史與目前數值，以及各家研究機構對於未來的預測，需要仔細確認各個數值的定義與單位，背景知識越多元越好。
     - **重大影響的具體事件**：近期對關鍵概念會有重大影響的具體事件，不是概念性的，通常是新法律的頒布或修訂、經濟狀態的急速變化 、地域政治的影響。
     直接輸出，無須說明。
-    使用者搜索意圖:{0}
-    """.format(query_intent)
+    使用者搜索意圖:{1}
+    """.format(keywords_cnt, query_intent)
 
     response = client.chat.completions.create(
         model="gpt-4-1106-preview",
@@ -196,17 +203,12 @@ def better_search(query_intent):
     )
     if response and response.choices and response.choices[0].message:
         response_message = response.choices[0].message.content
-        print(response_message)
-        list0 = [t for t in response_message.split('\n') if len(t) > 0]
-        list1 = [t for t in response_message.split('\n') if len(t) > 0 and regex_utils.is_unordered_list_member(t)]
-        list2 = [t.replace(regex_utils.extract_numbered_list_member(t), '') for t in response_message.split('\n') if
-                 len(t) > 0 and regex_utils.is_numbered_list_member(t)]
-        if len(list2) > len(list1):
-            list1 = list2
-        if len(list1) < 5:
-            list1 = list0
+
+        results_list = [t.replace(regex_utils.extract_numbered_list_member(t), '').strip() for t in
+                        response_message.split('\n') if len(t) > 0]
+
         all_search_list = None
-        for item in list1:
+        for item in results_list:
             query = urlencode({"q": item.replace(' ', '+')}).replace('%2B', '+')
             search_url = f"https://www.google.com/search?{query}"
             google_search_lists, _ = web_utils.search_google(search_url)

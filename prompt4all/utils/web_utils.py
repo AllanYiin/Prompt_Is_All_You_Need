@@ -1,3 +1,4 @@
+import builtins
 import json
 import logging
 import re
@@ -44,6 +45,22 @@ class CustomMarkdownConverter(markdownify.MarkdownConverter):
 # Create shorthand method for conversion
 def md4html(html, **options):
     return CustomMarkdownConverter(**options).convert(html)
+
+
+def check_useful_html_tag(tag):
+    tag_list = ['header', 'copyright', 'footer', 'telephone', 'breadcrumb', 'crumb', 'menu', 'accordion', 'modal',
+                'loading', 'shopping_cart']
+    if 'class' in tag.attrs:
+        _class = ''.join(tag.attrs['class']).lower()
+        for t in tag_list:
+            if t in _class:
+                return False
+    if 'id' in tag.attrs:
+        _id = tag.attrs['id'].lower()
+        for t in tag_list:
+            if t in _id:
+                return False
+    return True
 
 
 user_agents = [
@@ -250,15 +267,50 @@ def search_answer(query: str):
 
 
 def search_web(url: str):
+    """
+
+    Args:
+        url:
+
+
+    Returns:
+
+    Examples:
+        >>> search_web("https://www.livingplus.com.tw/shop/shop/%E5%B1%85%E5%AE%B6%E7%94%A8%E5%93%81/%E5%B1%85%E5%AE%89%E9%98%B2%E8%AD%B7/%E4%BF%9D%E9%9A%AA%E7%AE%B1/%E7%99%BC%E5%84%84%E9%87%91%E5%BA%ABst17w%E6%99%BA%E6%85%A7%E5%9E%8B%E4%BF%9D%E9%9A%AA%E7%AE%B1")
+        []
+
+    """
+
     headers = {
         'User-Agent': random.choice(user_agents)}
     session = requests.Session()
     session.headers.update(headers)
     response = session.get(url, headers=headers)
-    soup = BeautifulSoup(response.text, 'html.parser')
-    [data.decompose() for data in soup(['style', 'script'])]
-    content = ' '.join(soup.stripped_strings)
-    return content
+    if response.status_code == 200:
+        soup = BeautifulSoup(response.text, 'html.parser')
+        title = soup.find('title').text
+        [tag.decompose() for tag in soup.find_all(class_="collapse")]
+        [data.decompose() for data in
+         soup(['style', 'script', 'nav', 'a', 'button', 'input', 'select', 'option', 'dd', 'dt', 'dl'])]
+        total_words = len(soup.text)
+
+        def no_div_children(tag):
+            return tag.name == 'div' and (
+                    len(tag.text.strip()) > 10 or float(len(tag.text.strip())) / total_words > 0.05) and not [d for
+                                                                                                              d in
+                                                                                                              tag.find_all(
+                                                                                                                  'div')
+                                                                                                              if (
+                                                                                                                      len(d.text.strip()) > 10 or float(
+                                                                                                                  len(d.text.strip())) / total_words > 0.05)] and check_useful_html_tag(
+                tag)
+
+        divs = soup.find_all(no_div_children)
+
+        content = '\n'.join(['\n'.join(list(div.stripped_strings)) for div in divs])
+        return content, title, response.status_code
+    else:
+        return None, '', response.status_code
 
 
 def parse_html(html: str) -> str:
