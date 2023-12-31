@@ -88,47 +88,6 @@ def index2context(idx: int):
         return '[@PROMPT]'
 
 
-def prompt_api(inputs, context_type, top_p, temperature, top_k, frequency_penalty, full_history=[]):
-    _context_type = index2context(context_type)
-    cxt.baseChatGpt.API_PARAMETERS['temperature'] = temperature
-    cxt.baseChatGpt.API_PARAMETERS['top_p'] = top_p
-    cxt.baseChatGpt.API_PARAMETERS['top_k'] = top_k
-    cxt.baseChatGpt.API_PARAMETERS['frequency_penalty'] = frequency_penalty
-    if isinstance(full_history, gr.State):
-        full_history = full_history.value
-    streaming_chat = cxt.baseChatGpt.post_a_streaming_chat(inputs, _context_type, cxt.baseChatGpt.API_PARAMETERS,
-                                                           full_history)
-
-    while True:
-        if _context_type == ContextType.override:
-            if len(cxt.conversation_history.selected_item.mapping) > 2:
-                keys = list(cxt.conversation_history.selected_item.mapping.keys())
-                cxt.conversation_history.selected_item.mapping[keys[1]].message.content.parts[0] = inputs
-        elif _context_type == ContextType.globals:
-            if len(cxt.conversation_history.selected_item.mapping) > 2:
-                keys = list(cxt.conversation_history.selected_item.mapping.keys())
-                cxt.conversation_history.selected_item.mapping[keys[1]].message.content.parts.append(inputs)
-        else:
-            _current_item = cxt.conversation_history.selected_item.current_item
-            mid = str(uuid.uuid4())
-            if _current_item.children is None:
-                _current_item.children = []
-            _current_item.children.append(mid)
-            cxt.conversation_history.selected_item.mapping[mid] = Mapping(mapping_id=mid,
-                                                                          parent=_current_item.id).new_user_message_mapping(
-                inputs)
-            cxt.conversation_history.selected_item.current_node = mid
-
-            pass
-        try:
-            chat, answer, full_history = next(streaming_chat)
-            yield chat, full_history, full_history
-        except StopIteration:
-            break
-        except Exception as e:
-            raise gr.Error(str(e))
-
-
 def clear_history():
     FULL_HISTORY = [{"role": "system", "content": cxt.baseChatGpt.SYSTEM_MESSAGE,
                      "estimate_tokens": estimate_used_tokens(cxt.baseChatGpt.SYSTEM_MESSAGE,
@@ -175,6 +134,19 @@ if __name__ == '__main__':
             [{"role": "system", "content": '所有內容以繁體中文書寫',
               "estimate_tokens": estimate_used_tokens('所有內容以繁體中文書寫',
                                                       model_name=cxt.baseChatGpt.API_MODEL)}])
+
+        cxt.counter = 0
+
+
+        def get_status_word():
+            cxt.counter += 1
+            if cxt.counter == 3:
+                cxt.counter = 0
+            if len(cxt.status_word) > 0 and cxt.status_word.endswith('...'):
+                return cxt.status_word.replace("...", "".join(["."] * (cxt.counter + 1)))
+            return cxt.status_word
+
+
         cxt.state = state
         cxt.baseChatGpt.FULL_HISTORY = cxt.state.value
         gr.HTML(title)
@@ -185,17 +157,15 @@ if __name__ == '__main__':
                     with gr.Tabs():
                         with gr.TabItem("聊天"):
                             with gr.Column(scale=3):
-                                with gr.Row():
-                                    inputs = gr.Textbox(placeholder="什麼是LLM?",
-                                                        label="輸入文字後按enter", lines=10, max_lines=2000)  # t
-                                    context_type = gr.Dropdown(
-                                        ["[@PROMPT] 一般指令", "[@GLOBAL] 全局指令", "[@SKIP] 跳脫上文",
-                                         "[@SANDBOX] 沙箱隔絕",
-                                         "[@EXPLAIN] 解釋上文", "[@OVERRIDE] 覆寫全局"],
-                                        value="[@PROMPT] 一般指令", type='index', label="context處理",
-                                        elem_id='context_type',
-                                        interactive=True)
-
+                                inputs = gr.Textbox(placeholder="什麼是LLM?",
+                                                    label="輸入文字後按enter", lines=10, max_lines=2000)  # t
+                                context_type = gr.Dropdown(
+                                    ["[@PROMPT] 一般指令", "[@GLOBAL] 全局指令", "[@SKIP] 跳脫上文",
+                                     "[@SANDBOX] 沙箱隔絕",
+                                     "[@EXPLAIN] 解釋上文", "[@OVERRIDE] 覆寫全局"],
+                                    value="[@PROMPT] 一般指令", type='index', label="context處理",
+                                    elem_id='context_type',
+                                    interactive=True)
                                 with gr.Row(variant="panel"):
                                     b1 = gr.Button(value='送出', interactive=True, size='sm', scale=1)
                                     b2 = gr.Button(value='中止', interactive=True, size='sm', scale=1)
@@ -226,8 +196,8 @@ if __name__ == '__main__':
                                                                  col_count=(1, 'fixed'), interactive=True)
                     with gr.Column(scale=3):
                         chatbot = gr.Chatbot(elem_id='chatbot', container=True, height=550,
-                                             avatar_images=["images/avatar/human.png", "images/avatar/assistant.png"],
                                              render_markdown=True,
+                                             avatar_images=["images/avatar/human.png", "images/avatar/assistant.png"],
                                              show_copy_button=True, bubble_full_width=True, show_share_button=True,
                                              likeable=True,
                                              layout="panel")
@@ -258,6 +228,77 @@ if __name__ == '__main__':
                                                 label="其他功能使用之api", interactive=True)
                     gr.Group(dropdown_api1, dropdown_api4, dropdown_api2, dropdown_api3)
                     settings_ui.database_query_panel()
+        status_word = gr.Textbox(value=get_status_word, visible=False, interactive=True, every=2)
+
+
+        def prompt_api(inputs, context_type, top_p, temperature, top_k, frequency_penalty, full_history=[]):
+            _context_type = index2context(context_type)
+            cxt.baseChatGpt.API_PARAMETERS['temperature'] = temperature
+            cxt.baseChatGpt.API_PARAMETERS['top_p'] = top_p
+            cxt.baseChatGpt.API_PARAMETERS['top_k'] = top_k
+            cxt.baseChatGpt.API_PARAMETERS['frequency_penalty'] = frequency_penalty
+            if isinstance(full_history, gr.State):
+                full_history = full_history.value
+            streaming_chat = cxt.baseChatGpt.post_a_streaming_chat(inputs, _context_type,
+                                                                   cxt.baseChatGpt.API_PARAMETERS,
+                                                                   full_history)
+
+            while True:
+                if _context_type == ContextType.override:
+                    if len(cxt.conversation_history.selected_item.mapping) > 2:
+                        keys = list(cxt.conversation_history.selected_item.mapping.keys())
+                        cxt.conversation_history.selected_item.mapping[keys[1]].message.content.parts[0] = inputs
+                elif _context_type == ContextType.globals:
+                    if len(cxt.conversation_history.selected_item.mapping) > 2:
+                        keys = list(cxt.conversation_history.selected_item.mapping.keys())
+                        cxt.conversation_history.selected_item.mapping[keys[1]].message.content.parts.append(inputs)
+                else:
+                    _current_item = cxt.conversation_history.selected_item.current_item
+                    mid = str(uuid.uuid4())
+                    if _current_item.children is None:
+                        _current_item.children = []
+                    _current_item.children.append(mid)
+                    cxt.conversation_history.selected_item.mapping[mid] = Mapping(mapping_id=mid,
+                                                                                  parent=_current_item.id).new_user_message_mapping(
+                        inputs)
+                    cxt.conversation_history.selected_item.current_node = mid
+
+                    pass
+                try:
+                    full_history = next(streaming_chat)
+                    if len(full_history) > 2:
+                        hisory = [item for item in full_history if item['role'] not in ['system', 'tool']]
+                        if len(hisory) % 2 == 0:
+                            chat = [(process_chat(hisory[i]), process_chat(hisory[i + 1])) for i in
+                                    range(0, len(hisory), 2)]
+                            if len(chat) > 0 and len(chat[-1]) == 2:
+                                _last_tuple = chat[-1]
+                                chat[-1] = (
+                                    _last_tuple[0],
+                                    _last_tuple[1] + "\n" + status_word.value if _last_tuple[
+                                                                                     1] is not None else status_word.value)
+                            yield chat, full_history, full_history
+                except StopIteration:
+                    break
+                except Exception as e:
+                    raise gr.Error(str(e))
+
+
+        def status_change(status_word, full_history):
+            if full_history and len(full_history) >= 2:
+                chat = [(process_chat(full_history[i]), process_chat(full_history[i + 1])) for i in
+                        range(1, len(full_history) - 1, 2) if full_history[i]['role'] != 'system']
+                if len(chat) > 0 and len(chat[-1]) == 2:
+                    _last_tuple = chat[-1]
+                    chat[-1] = (
+                        _last_tuple[0],
+                        _last_tuple[1] + "\n" + status_word if _last_tuple[1] is not None else status_word)
+                    return chat, full_history, full_history
+            return [], full_history, full_history
+
+
+        status_word.change(fn=status_change, inputs=[status_word, state],
+                           outputs=[chatbot, state, history_viewer], show_progress=False)
 
         inputs_event = inputs.submit(prompt_api,
                                      [inputs, context_type, top_p, temperature, top_k, frequency_penalty, state],

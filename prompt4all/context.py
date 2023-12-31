@@ -64,8 +64,9 @@ def split_path(path: str):
     if '.' in filename:
         filename, ext = os.path.splitext(filename)
         # handle double ext, like 'mode.pth.tar'
-        filename, ext2 = os.path.splitext(filename)
-        ext = ext2 + ext
+        if ext in ['.tar', '.pth', '.pkl', '.ckpt', '.bin', '.pt', '.zip']:
+            filename, ext2 = os.path.splitext(filename)
+            ext = ext2 + ext
     else:
         folder = os.path.join(folder, filename)
         filename = ''
@@ -198,11 +199,16 @@ class _Context:
         self.print = partial(print, flush=True)
 
         self.prompt4all_dir = self.get_prompt4all_dir()
+        self.service_type = None
+        self.deployments = []
         self.baseChatGpt = None
         self.summaryChatGpt = None
         self.imageChatGpt = None
         self.otherChatGpt = None
         self.state = None
+        self.assistant_state = None
+        self.status_word = ''
+        self.counter = 0
         self.sql_engine = None
         self.conn_string = None
         self.databse_schema = None
@@ -210,6 +216,7 @@ class _Context:
         self.numpy_print_format = '{0:.4e}'
         self.plateform = None
         self.whisper_model = None
+        self.current_assistant = None
         self.assistants = []
 
         if os.path.exists(os.path.join(self.get_prompt4all_dir(), 'session.json')):
@@ -330,8 +337,11 @@ class _Context:
                 session.pop('conversation_history')
                 session.pop('is_initialized')
                 session.pop('sql_engine')
-
+                session.pop('status_word')
+                session.pop('counter')
                 session.pop('print')
+                session.pop('current_assistant')
+                session.pop('assistant_state')
                 session['assistants'] = [a.json() if is_instance(a, "Assistant") else a for a in self.assistants]
                 session['baseChatGpt'] = self.baseChatGpt if isinstance(self.baseChatGpt,
                                                                         str) else self.baseChatGpt.api_model if self.baseChatGpt else None
@@ -343,6 +353,7 @@ class _Context:
                                                                           str) else self.otherChatGpt.api_model if self.otherChatGpt else None
                 session['state'] = self.state if isinstance(self.state, str) else str(
                     self.state.value) if self.state else None
+
                 f.write(json.dumps(session, indent=4, ensure_ascii=False))
         except IOError:
             # Except permission denied.
@@ -360,6 +371,8 @@ class _Context:
                         try:
                             self.__setattr__(k, v)
 
+                            if k == 'service_type' and self.service_type is None:
+                                self.__setattr__(k, 'openai')
 
                         except Exception as e:
                             print(e)
