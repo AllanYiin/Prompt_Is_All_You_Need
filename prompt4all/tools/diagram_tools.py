@@ -10,6 +10,9 @@ import io
 import regex
 import json
 import time
+import subprocess
+import tempfile
+import uuid
 
 client = OpenAI()
 client._custom_headers['Accept-Language'] = 'zh-TW'
@@ -69,9 +72,8 @@ def generate_mermaid_diagram(graph):
     return encode_pecko
 
 
-mermaid_charts = ['Flowchart', 'Sequence Diagram', 'Class Diagram', 'State Diagram', 'Entity Relationship Diagram',
-                  'User Journey', 'Gantt', 'Pie Chart', 'Quadrant Chart',
-                  'Requirement Diagram']
+mermaid_charts = ['flowchart', 'sequenceDiagram', 'classDiagram', 'stateDiagram', 'erDiagram',
+                  'journey', 'gantt', 'gitGraph', 'pie', 'mindmap.md', 'quadrantChart', 'xychart']
 
 
 def extract_code(text):
@@ -137,3 +139,50 @@ def generate_diagram(di, dt, ss=None):
     # img.save(filepath)
     return str({"圖表類型": dt, "瀏覽圖表路徑": 'https://mermaid.live/view#pako:' + encode_pecko,
                 "編輯圖表路徑": 'https://mermaid.live/edit#pako:' + encode_pecko, "產出圖表語法": graph_syntax})
+
+
+def exec_mermaid_cli(mermaid_markdown, diagram_type):
+    temfolder = tempfile.gettempdir()
+    input_path = os.path.join(temfolder, uuid.uuid4() + '.mmd')
+    with open(input_path, "w") as t:
+        t.write(mermaid_markdown)
+
+    output_path = './generate_images/{0}_{1}.png'.format(diagram_type, uuid.uuid4().node)
+
+    mm_args = ["mmdc", "-i", input_path, "-o", outfn]
+    p = subprocess.Popen(
+        mm_args, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=1)
+    p.communicate(input=None, timeout=60)
+    if p.returncode == 0:
+        return output_path
+    if p.returncode != 0:
+        raise RuntimeError(
+            "Mermaid exited with error:\n[stderr]\n%s\n"
+            "[stdout]\n%s" % (stderr, stdout)
+        )
+    if not os.path.isfile(output_path):
+        raise RuntimeError(
+            "Mermaid did not produce an output file:\n[stderr]\n%s\n"
+            "[stdout]\n%s" % (stderr, stdout)
+        )
+
+
+def get_diagram_guidelines(dt):
+    if dt == 'sequenceDiagram':
+        return open("prompts / sequenceDiagram.md", encoding="utf-8").read()
+    elif dt == 'flowchart':
+        return open("prompts / flowchart.md", encoding="utf-8").read()
+    elif dt == 'mindmap':
+        return open("prompts / mindmap.md", encoding="utf-8").read()
+
+
+def get_diagram(dt, mc, ra=1):
+    diagram_path = exec_mermaid_cli(mc, dt)
+    if not diagram_path:
+        return "產生圖表失敗，請檢查圖表語法是否正確。"
+    encode_pecko = generate_mermaid_diagram(mc)
+    return_markdown = "<img src=\"{0}\" alt=\"{1}\" title=\"{2}\">".format(diagram_path, dt, dt) + "\n  " + \
+                      "[查看全屏圖表]({0}})\n  [在線編輯圖表]({1}})\n  ".format(
+                          'https://mermaid.live/view#pako:' + encode_pecko,
+                          'https://mermaid.live/edit#pako:' + encode_pecko)
+    return return_markdown

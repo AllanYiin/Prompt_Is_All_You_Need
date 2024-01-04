@@ -1,28 +1,49 @@
-{
-  "type": "function",
-  "function": {
-    "name": "generate_diagram",
-    "description": "Need to generate diagram as representations of concepts or knowledge",
-    "parameters": {
-      "type": "object",
-      "properties": {
-        "di": {
-          "type": "string",
-          "description": "Full snippet on the need to present concepts in the form of a diagram"
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "get_diagram",
+      "description": "Used to render and return images of diagram defined by input Mermaid markdown code",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "dt": {
+            "type": "string",
+            "description": "diagram type:'flowchart', 'sequenceDiagram', 'classDiagram', 'stateDiagram', 'erDiagram','journey', 'gantt', 'gitGraph', 'pie', 'mindmap', 'quadrantChart', 'xychart'"
+          },
+          "mc": {
+            "type": "string",
+            "description": "A string containing Mermaid markdown coded that defines the structure and content of the diagram"
+          },
+          "ra": {
+            "type": "integer",
+            "description": "(optional): number of remaining attempts if rendering fails"
+          }
         },
-        "dt": {
-          "type": "string",
-          "description": "Type of diagram:flowchart, mindmap"
+        "required": [
+          "dt",
+          "mc"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_diagram_guidelines",
+      "description": "get the guidelines about how to write mermaid markdown code  for the diagram",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "dt": {
+            "type": "string",
+            "description": "diagram type:'flowchart', 'sequenceDiagram', 'classDiagram', 'stateDiagram', 'erDiagram','journey', 'gantt', 'gitGraph', 'pie', 'mindmap', 'quadrantChart', 'xychart'"
+          }
         },
-        "ss": {
-          "type": "string",
-          "description": "md syntax for build a diagam"
-        }
-      },
-      "required": [
-        "di",
-        "dt"
-      ]
+        "required": [
+          "dt"
+        ]
+      }
     }
   }
-}
+]
