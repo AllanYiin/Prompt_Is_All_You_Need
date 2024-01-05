@@ -2,6 +2,7 @@ import json
 import time
 import regex
 import copy
+import random
 from collections import OrderedDict
 from prompt4all import context
 from prompt4all.context import *
@@ -17,7 +18,9 @@ import gradio as gr
 import uuid
 import requests
 from datetime import datetime
-from urllib.parse import urlencode, unquote
+
+from io import StringIO, BytesIO
+import urllib
 
 client = OpenAI()
 client._custom_headers['Accept-Language'] = 'zh-TW'
@@ -62,6 +65,11 @@ def webpage_reader(link: str, ur: str, l: str, it: str, lp: bool = False, rt: bo
                                             url=_url, raw=None)
         returnData[_url] = new_results
 
+    if link.endswith('.pdf'):
+        pdf_doc_text = get_pdf_content(link)
+        cxt.citations.append('![pdf](../images/pdf.png) [{0}]({1})'.format(link.split('/')[-1], link))
+        return pdf_doc_text
+
     header = {
         "Content-Type": "application/json",
         "WebPilot-Friend-UID": str(uuid.uuid4()),
@@ -69,7 +77,7 @@ def webpage_reader(link: str, ur: str, l: str, it: str, lp: bool = False, rt: bo
     if 'www.statista.com' in link and lv == 0:
         link = 'https://www.google.com/search?' + urlencode({"q": ur.replace(' ', '+')}).replace('%2B', '+')
 
-    if ur and lv == 0 and link is None:
+    if ur and (link is None or link == 'none') and not ur.startswith('site:'):
         search_lists = better_search(ur)
         threads = []
         for i in range(len(search_lists['webpage_list'])):
@@ -88,7 +96,10 @@ def webpage_reader(link: str, ur: str, l: str, it: str, lp: bool = False, rt: bo
             time.sleep(1)
         for k, v in returnData.items():
             results = results + '\n\n' + k + '\n\n' + v
-    elif 'https://www.google.com/search' in link:
+    elif ur.startswith('site:') or 'https://www.google.com/search' in link:
+        if ur.startswith('site:'):
+            link = 'https://www.google.com/search/?q=' + ur
+            # + urlencode(  {"q": ur.replace('\n', '+').replace(' ', '+')}).replace('%2B', '+'))
         search_lists, _ = web_utils.search_google(link)
         return json.dumps(search_lists, ensure_ascii=False)
         # threads = []
@@ -111,7 +122,7 @@ def webpage_reader(link: str, ur: str, l: str, it: str, lp: bool = False, rt: bo
         return json.dumps(search_lists, ensure_ascii=False)
     else:
 
-        new_results, title, status_code = web_utils.search_web(_url)
+        new_results, title, status_code = web_utils.search_web(link, True if it == 'table' else False)
         if status_code != 200 or new_results is None or len(new_results) < 200:
             part_id = uuid.uuid4()
             data = {
@@ -139,11 +150,13 @@ def webpage_reader(link: str, ur: str, l: str, it: str, lp: bool = False, rt: bo
 
         if it == 'news':
             title = title if title else ur
-            new_results = get_news_list(title, new_results)
+            return get_news_list(title, new_results)
         elif it in ['knowledge', 'research']:
+            cxt.citations.append('![web](../images/web.png) [{0}]({1})'.format(title, link))
             pass
         elif it == 'table':
-            new_results = get_table_list(new_results)
+
+            return get_table_list(new_results, link)
         else:
             _prompt = '請將以下網頁內容僅保留與「{0}」相關之部分。"\n"""\n{1}\n"""\n'.format(ur, new_results)
             response = client.chat.completions.create(
@@ -161,13 +174,14 @@ def webpage_reader(link: str, ur: str, l: str, it: str, lp: bool = False, rt: bo
             response_message = response.choices[0].message
             new_results = response_message.content
         if new_results and len(new_results) > 0:
+            part_id = uuid.uuid4()
             save_knowledge_base(part_id=part_id, text_content=title, parent_id=None, ordinal=None, is_rewrite=0,
                                 source_type=1,
                                 url=link,
                                 raw=new_results)
 
         if len(new_results) > 200:
-            parts = web_utils.cleasing_web_text(results)
+            parts = web_utils.cleasing_web_text(new_results)
             for r in range(len(parts)):
                 this_text = parts[r]
                 save_knowledge_base(part_id=uuid.uuid4(), text_content=this_text, parent_id=part_id,
@@ -387,7 +401,7 @@ def get_knowledge_list(ur, content: str, l: str):
     return ''
 
 
-def get_table_list(content: str):
+def get_table_list(content: str, url):
     _json_schema = {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "type": "object",
@@ -407,7 +421,7 @@ def get_table_list(content: str):
                         },
                         "source": {
                             "type": "string",
-                            "format": "uri",
+                            "format": "url",
                             "description": "The URL of the web page where the table is extracted from"
                         },
                         "table": {
@@ -415,15 +429,15 @@ def get_table_list(content: str):
                             "description": "The table formatted as markdown"
                         }
                     },
-                    "required": ["title", "table"]
+                    "required": ["title", "table", "url"]
                 }
             }
         },
         "required": ["tables"]
     }
 
-    _prompt = '請將以下內容中表格形式的數據，然後依照{0} schema來進行整理為表格列表，若無案例則回傳空字典 "\n"""\n{1}\n"""\n'.format(
-        _json_schema, content)
+    _prompt = '請將以下來自於{0}內容中表格形式的數據，然後依照{1} schema來進行整理為表格列表，若無案例則回傳空字典 "\n"""\n{2}\n"""\n'.format(
+        url, _json_schema, content)
     response = client.chat.completions.create(
         model="gpt-3.5-turbo-1106",
         messages=[
@@ -438,4 +452,14 @@ def get_table_list(content: str):
     )
     response_message = response.choices[0].message
     print(response_message.content)
+    for item in json.loads(response_message.content)['tables']:
+        cxt.citations.append('![table](../images/table.png) [{0}]({1})'.format(item['title'], url))
+
     return response_message.content
+
+
+def get_pdf_content(pdf_url):
+    from prompt4all.utils import pdf_utils
+    _pdf = pdf_utils.PDF(pdf_url)
+    _pdf.parsing_save()
+    return _pdf.doc_text
