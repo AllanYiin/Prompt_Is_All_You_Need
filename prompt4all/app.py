@@ -6,15 +6,14 @@ import time
 import string
 import builtins
 import uuid
-
 import regex
 from pathlib import Path
 import gradio as gr
 import openai
+import inspect
 import copy
 import requests
 import asyncio
-import time
 import nest_asyncio
 import openai_async
 import whisper
@@ -24,6 +23,10 @@ from pydub import AudioSegment
 from datetime import datetime, timedelta
 from queue import Queue
 from openai.types import beta
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from fastapi import FastAPI
+from gradio.routes import safe_join
 
 nest_asyncio.apply()
 from collections import OrderedDict
@@ -46,6 +49,9 @@ from prompt4all.context import *
 from prompt4all.common import find_available_port
 from prompt4all.ui import settings_ui, rewrite_ui, image_ui, nlu_ui, assistant_ui, chatbot_ui, summarization_ui
 from openai import OpenAI, AsyncOpenAI, AzureOpenAI
+import uvicorn
+
+# app = FastAPI()
 
 os.chdir(os.path.dirname(__file__))
 cxt = context._context()
@@ -88,6 +94,40 @@ def index2context(idx: int):
         return '[@PROMPT]'
 
 
+def message2chat():
+    _state = cxt.state.value
+    chat = []
+    # chat.append((None,
+    #              '![流程圖](./generate_images/1701555707-日本櫻前線數據為主題的立體infographic-1.png  "流程圖")'))
+    # chat.append(
+    #     (None,
+    #      '<div style="height:350px"><img title="流程圖" alt="流程圖"  src="http://localhost:7860/generate_images/1701555707-日本櫻前線數據為主題的立體infographic-1.png"></div>'))
+    if _state:
+        for i in range(len(_state)):
+            current_message = process_chat(_state[i])
+            if _state[i]['role'] == 'user':
+                next_message = process_chat(_state[i + 1]) if i < len(_state) - 1 else None
+                chat.append((current_message, next_message))
+            elif _state[i]['role'] == 'assistant':
+                if current_message is None or len(current_message.strip()) == 0:
+                    pass
+                elif i > 0 and _state[i - 1]['role'] == 'user':
+                    pass
+                else:
+                    chat.append((None, current_message))
+    if cxt.baseChatGpt and cxt.baseChatGpt.temp_state and len(cxt.baseChatGpt.temp_state) > 0:
+        for i in range(len(cxt.baseChatGpt.temp_state)):
+            current_message = process_chat(cxt.baseChatGpt.temp_state[i])
+            if current_message is None or len(current_message.strip()) == 0:
+                pass
+            else:
+                chat.append((None, current_message))
+
+    if len(chat) > 0:
+        return chat
+    return None
+
+
 def clear_history():
     FULL_HISTORY = [{"role": "system", "content": cxt.baseChatGpt.SYSTEM_MESSAGE,
                      "estimate_tokens": estimate_used_tokens(cxt.baseChatGpt.SYSTEM_MESSAGE,
@@ -121,8 +161,11 @@ if __name__ == '__main__':
         title = """<h1 align="center">🔥🤖Prompt is All You Need! 🚀</h1><br><h2 align="center"><span style='color:red'>你尚未設置api key</span></h2>"""
     description = ""
     cancel_handles = []
-    with gr.Blocks(title="Prompt is what you need!", css=advanced_css, analytics_enabled=False,
-                   theme=adjust_theme()) as demo:
+
+    this_blocks = gr.Blocks(title="Prompt is what you need!", css=advanced_css, analytics_enabled=False,
+                            theme=adjust_theme())
+
+    with this_blocks:
 
         cxt.baseChatGpt = GptBaseApi(cxt.baseChatGpt) if cxt.baseChatGpt else GptBaseApi(model="gpt-4-1106-preview")
         cxt.baseChatGpt.enable_database_query(cxt.is_db_enable)
@@ -130,11 +173,11 @@ if __name__ == '__main__':
             model="gpt-3.5-turbo-1106")
         cxt.imageChatGpt = GptBaseApi(cxt.imageChatGpt) if cxt.imageChatGpt else GptBaseApi(model="gpt-4-1106-preview")
         cxt.otherChatGpt = GptBaseApi(cxt.otherChatGpt) if cxt.otherChatGpt else GptBaseApi(model="gpt-4-1106-preview")
-        state = gr.State(eval(cxt.state)) if cxt.state else gr.State(
+        state = gr.State(
             [{"role": "system", "content": '所有內容以繁體中文書寫',
               "estimate_tokens": estimate_used_tokens('所有內容以繁體中文書寫',
                                                       model_name=cxt.baseChatGpt.API_MODEL)}])
-
+        cxt.state = state
         cxt.counter = 0
 
 
@@ -147,8 +190,7 @@ if __name__ == '__main__':
             return cxt.status_word
 
 
-        cxt.state = state
-        cxt.baseChatGpt.FULL_HISTORY = cxt.state.value
+        # cxt.baseChatGpt.FULL_HISTORY = cxt.state.value
         gr.HTML(title)
 
         with gr.Tabs():
@@ -195,11 +237,11 @@ if __name__ == '__main__':
                                                                  headers=["歷史"], datatype=["str"],
                                                                  col_count=(1, 'fixed'), interactive=True)
                     with gr.Column(scale=3):
-                        chatbot = gr.Chatbot(elem_id='chatbot', container=True, height=550,
+                        chatbot = gr.Chatbot(value=message2chat, elem_classes='chatbot', container=True, height=550,
                                              render_markdown=True,
                                              avatar_images=["images/avatar/human.png", "images/avatar/assistant.png"],
                                              show_copy_button=True, bubble_full_width=True, show_share_button=True,
-                                             likeable=True,
+                                             likeable=True, every=1,
                                              layout="panel")
                         b3.add(chatbot)
             with gr.TabItem("歷史"):
@@ -228,21 +270,21 @@ if __name__ == '__main__':
                                                 label="其他功能使用之api", interactive=True)
                     gr.Group(dropdown_api1, dropdown_api4, dropdown_api2, dropdown_api3)
                     settings_ui.database_query_panel()
-        status_word = gr.Textbox(value=get_status_word, visible=False, interactive=True, every=2)
 
 
-        def prompt_api(inputs, context_type, top_p, temperature, top_k, frequency_penalty, full_history=[]):
+        def prompt_api(inputs, context_type, top_p, temperature, top_k, frequency_penalty, full_history):
+            cxt.baseChatGpt.temp_state.append({"role": "status", "content": '執行中...'})
             _context_type = index2context(context_type)
             cxt.baseChatGpt.API_PARAMETERS['temperature'] = temperature
             cxt.baseChatGpt.API_PARAMETERS['top_p'] = top_p
             cxt.baseChatGpt.API_PARAMETERS['top_k'] = top_k
             cxt.baseChatGpt.API_PARAMETERS['frequency_penalty'] = frequency_penalty
-            if isinstance(full_history, gr.State):
-                full_history = full_history.value
+
+            # if isinstance(full_history, gr.State):
+            #     full_history = full_history.value
             streaming_chat = cxt.baseChatGpt.post_a_streaming_chat(inputs, _context_type,
                                                                    cxt.baseChatGpt.API_PARAMETERS,
                                                                    full_history)
-
             while True:
                 if _context_type == ContextType.override:
                     if len(cxt.conversation_history.selected_item.mapping) > 2:
@@ -266,50 +308,35 @@ if __name__ == '__main__':
                     pass
                 try:
                     full_history = next(streaming_chat)
-                    if len(full_history) > 2:
-                        hisory = [item for item in full_history if item['role'] not in ['system', 'tool']]
-                        if len(hisory) % 2 == 0:
-                            chat = [(process_chat(hisory[i]), process_chat(hisory[i + 1])) for i in
-                                    range(0, len(hisory), 2)]
-                            if len(chat) > 0 and len(chat[-1]) == 2:
-                                _last_tuple = chat[-1]
-                                chat[-1] = (
-                                    _last_tuple[0],
-                                    _last_tuple[1] + "\n" + status_word.value if _last_tuple[
-                                                                                     1] is not None else status_word.value)
-                            yield chat, full_history, full_history
+                    chat = message2chat()
+                    # if len(full_history) > 2:
+                    #     hisory = [item for item in full_history if item['role'] not in ['system', 'tool']]
+                    #     if len(hisory) % 2 == 0:
+                    #         chat = [(process_chat(hisory[i]), process_chat(hisory[i + 1])) for i in
+                    #                 range(0, len(hisory), 2)]
+                    #         if len(chat) > 0 and len(chat[-1]) == 2:
+                    #             _last_tuple = chat[-1]
+                    #             chat[-1] = (
+                    #                 _last_tuple[0],
+                    #                 _last_tuple[1] + "\n" + status_word.value if _last_tuple[
+                    #                                                                  1] is not None else status_word.value)
+                    yield chat, full_history
                 except StopIteration:
                     break
                 except Exception as e:
                     raise gr.Error(str(e))
 
 
-        def status_change(status_word, full_history):
-            if full_history and len(full_history) >= 2:
-                chat = [(process_chat(full_history[i]), process_chat(full_history[i + 1])) for i in
-                        range(1, len(full_history) - 1, 2) if full_history[i]['role'] != 'system']
-                if len(chat) > 0 and len(chat[-1]) == 2:
-                    _last_tuple = chat[-1]
-                    chat[-1] = (
-                        _last_tuple[0],
-                        _last_tuple[1] + "\n" + status_word if _last_tuple[1] is not None else status_word)
-                    return chat, full_history, full_history
-            return [], full_history, full_history
-
-
-        status_word.change(fn=status_change, inputs=[status_word, state],
-                           outputs=[chatbot, state, history_viewer], show_progress=False)
-
         inputs_event = inputs.submit(prompt_api,
                                      [inputs, context_type, top_p, temperature, top_k, frequency_penalty, state],
-                                     [chatbot, state, history_viewer])
+                                     [chatbot, state])
         cancel_handles.append(inputs_event)
         inputs_event.then(reset_context, [], [context_type]).then(reset_textbox, [], [inputs])
         b1_event = b1.click(prompt_api, [inputs, context_type, top_p, temperature, top_k, frequency_penalty, state],
-                            [chatbot, cxt.state, history_viewer])
+                            [chatbot, state])
         cancel_handles.append(b1_event)
         b1_event.then(reset_context, [], [context_type]).then(reset_textbox, [], [inputs])
-        b3.click(clear_history, [], [chatbot, state, history_viewer]).then(reset_textbox, [], [inputs])
+        b3.click(clear_history, [], [state, history_viewer]).then(reset_textbox, [], [inputs])
         b2.click(fn=None, inputs=None, outputs=None, cancels=cancel_handles)
         chatbot.change(scroll_to_output=True)
 
@@ -318,20 +345,20 @@ if __name__ == '__main__':
             cxt.conversation_history.new_chat()
             history_list.value = cxt.conversation_history.titles
             chat = cxt.conversation_history.selected_item.get_gradio_chat()
-            return chat, state
+            return state
 
 
-        b4.click(fn=new_chat, inputs=[state], outputs=[chatbot, state])
+        b4.click(fn=new_chat, inputs=[state], outputs=[state])
 
 
         def select_conversation(evt: gr.SelectData):
             conversations = cxt.conversation_history.conversations[evt.index[0]].get_prompt_messages(only_final=True)
             cxt.conversation_history.selected_index = evt.index[0]
             chat = cxt.conversation_history.selected_item.get_gradio_chat()
-            return chat, cxt.state
+            return cxt.state
 
 
-        history_list.select(select_conversation, None, [chatbot, state])
+        history_list.select(select_conversation, None, [cxt.state])
 
         dropdown_api1.change(lambda x: cxt.baseChatGpt.change_model(x), [dropdown_api1], [])
         dropdown_api2.change(lambda x: cxt.summaryChatGpt.change_model(x), [dropdown_api2], [])
@@ -360,4 +387,54 @@ if __name__ == '__main__':
 
 
         auto_opentab_delay()
-        demo.queue(api_open=False).launch(show_error=True, max_threads=200, share=True, server_port=PORT)
+
+        # async def get_image(self, filename: str):
+        #     return FileResponse(f"{generate_images}/{filename}")
+        #
+        # app = gr.routes.App.create_app(this_blocks, timeout=5)
+        #
+        this_blocks.queue(default_concurrency_limit=100, api_open=False, max_size=100)
+        app = gr.routes.App.create_app(this_blocks)
+
+
+        @app.get("/generate_images/{filename:path}")
+        async def get_generate_images(filename: str):
+            return FileResponse(f"generate_images/{filename}")
+
+
+        @app.get("/images/{filename:path}")
+        async def get_images(filename: str):
+            return FileResponse(f"images/{filename}")
+
+
+        @app.get("/download_pdfs/{filename:path}")
+        async def get_download_pdfs(filename: str):
+            return FileResponse(f"download_pdfs/{filename}")
+
+
+        # gradio_
+
+        # app.mount("/", gradio_app)
+
+        # app = gr.mount_gradio_app(app, this_blocks, path="/")
+        # # app.mount("/", StaticFiles(directory="generate", html=True), name="static")
+        uvicorn.run(app, host='localhost', port=PORT)
+
+        # app.add_route('/images/{filename}', get_image, methods=['GET'])
+
+        # @app.get("/images/{path:path}")
+        # def build_resource(path: str):
+        #     build_file = safe_join(BUILD_PATH_LIB, path)
+        #     return FileResponse(build_file)
+
+        # @app.get("/file{file_path:path}")
+        # async def file(file_path: str, request: Request):
+        #     # redirect to the "api." host and gradio_tts path
+        #     current_url = request.url
+        #     if "localhost" in current_url.hostname or "127." in current_url.hostname:
+        #         return RedirectResponse(url="http://localhost:8000/gradio_tts/file" + str(file_path))
+        #     return RedirectResponse(url="https://api.text-generator.io/gradio_tts/file" + str(file_path))
+        #
+        # this_blocks.launch(show_error=True, prevent_thread_lock=True, allowed_paths=['generate_images'], show_api=True,
+        #                    max_threads=200, share=True,
+        #                    server_port=PORT)

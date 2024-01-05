@@ -4,13 +4,17 @@ import os
 import uuid
 import openai
 from openai import OpenAI, AsyncOpenAI, AzureOpenAI, AsyncAzureOpenAI, RequestOptions
+from openai.types.chat import ChatCompletionSystemMessageParam, ChatCompletionUserMessageParam, \
+    ChatCompletionAssistantMessageParam, ChatCompletionToolMessageParam, ChatCompletionFunctionMessageParam, \
+    ChatCompletionMessageToolCallParam
 from openai._types import NotGiven, NOT_GIVEN
 import asyncio
 import requests
 import copy
+import threading
 import prompt4all.api.context_type as ContextType
 from prompt4all.utils.regex_utils import *
-
+from prompt4all.common import *
 from prompt4all.tools import database_tools, web_tools, diagram_tools
 from prompt4all.utils.chatgpt_utils import process_chat
 from prompt4all.utils.tokens_utils import estimate_used_tokens
@@ -18,6 +22,7 @@ from prompt4all import context
 from prompt4all.context import *
 
 client = OpenAI()
+
 client._custom_headers['Accept-Language'] = 'zh-TW'
 cxt = context._context()
 
@@ -113,8 +118,15 @@ class GptBaseApi:
         js.remove('./tools\\query_sql.json')
         js.remove('./tools\\code_interpreter.json')
         js.remove('./tools\\image_generation.json')
+        self.temp_state = []
+        self.tools = []
+        for j in js:
+            _tool = eval(open(j, encoding="utf-8").read())
+            if isinstance(_tool, dict):
+                self.tools.append(_tool)
+            elif isinstance(_tool, list):
+                self.tools.extend(_tool)
 
-        self.tools = [eval(open(j, encoding="utf-8").read()) for j in js]
         self.API_MODEL = None
         self.API_TYPE = 'openai'
         self.BASE_URL = None
@@ -212,6 +224,31 @@ class GptBaseApi:
                 },
             })
 
+    def history2message_context(self, history):
+        message_context = []
+        for message in history:
+            if message['role'] == 'system':
+                _message = ChatCompletionSystemMessageParam(**{"content": message['content'], "role": "system"})
+                message_context.append(_message)
+            if message['role'] == 'assistant':
+                args = {"content": message['content'], "role": "assistant"}
+                if 'tool_calls' in message:
+                    args['tool_calls'] = []
+                    for toolcall in message['tool_calls']:
+                        args['tool_calls'].append(ChatCompletionMessageToolCallParam(
+                            **{"id": toolcall['id'], "type": toolcall['type'], "function": toolcall['function']}))
+                _message = ChatCompletionAssistantMessageParam(**args)
+                message_context.append(_message)
+            elif message['role'] == 'user':
+                _message = ChatCompletionUserMessageParam(**{"content": message['content'], "role": "user"})
+                message_context.append(_message)
+            elif message['role'] == 'tool':
+                _message = ChatCompletionToolMessageParam(
+                    **{"content": message['content'], "tool_call_id": message['tool_call_id'], 'name': message['name'],
+                       "role": "tool"})
+                message_context.append(_message)
+        return message_context
+
     def build_message(self, role, content):
         """
         Build a chat message with the given role and content.
@@ -225,70 +262,77 @@ class GptBaseApi:
         """
         return {"role": str(role), "content": str(content)}
 
-    def process_context(self, prompt, context_type, full_history: list):
+    def process_context(self, prompt, context_type):
         # 確認每筆對話紀錄都有estimate_tokens，若無則計算寫入
-        for i in range(len(full_history)):
-            if 'estimate_tokens' not in full_history[i]:
-                full_history[i]['estimate_tokens'] = estimate_used_tokens(
-                    full_history[i]['content']) + estimate_used_tokens(full_history[i]['role'],
-                                                                       model_name=self.API_MODEL) + 4
+        for i in range(len(cxt.state.value)):
+            if 'estimate_tokens' not in cxt.state.value[i]:
+                if cxt.state.value[i]['content'] is None:
+                    cxt.state.value[i]['estimate_tokens'] = 4
+                else:
+                    cxt.state.value[i]['estimate_tokens'] = estimate_used_tokens(
+                        cxt.state.value[i]['content']) + estimate_used_tokens(cxt.state.value[i]['role'],
+                                                                              model_name=self.API_MODEL) + 4
 
         # 避免重複送出或是查詢時網路中斷
-        if full_history[-1]['role'] == 'user' and full_history[-1]['content'] == prompt:
-            full_history.pop(-1)
+        if cxt.state.value[-1]['role'] == 'user' and cxt.state.value[-1]['content'] == prompt:
+            cxt.state.value.pop(-1)
         # 最低需求量等於 本次prompt tokens+系統prompt tokens(除非 ContextType.sandbox)+200  預留輸出用
         this_input_tokens = estimate_used_tokens(prompt) + estimate_used_tokens('user', model_name=self.api_model) + 4
         if this_input_tokens + (
-                full_history[0][
+                cxt.state.value[0][
                     'estimate_tokens'] if context_type != ContextType.sandbox else 0) + 200 > self.MAX_TOKENS:
             raise ValueError('輸入prompt加上預留回覆總耗用tokens數為{0},超過模型上限{1}'.format(
-                this_input_tokens + full_history[0]['estimate_tokens'] + 200, self.MAX_TOKENS))
+                this_input_tokens + cxt.state.value[0]['estimate_tokens'] + 200, self.MAX_TOKENS))
 
         if context_type == ContextType.skip:
-            message_context = [self.build_message(message['role'], message['content']) for message in full_history if
-                               message['role'] == 'system']
+            message_context = [m for m in self.history2message_context(cxt.state.value) if m['role'] != 'system']
+
         elif context_type == ContextType.sandbox:
             message_context = []
         else:
+
+            cxt.state.value.append({"role": "user", "content": prompt})
             remain_tokens = self.MAX_TOKENS - this_input_tokens - 200
 
-            estimate_tokens = sum([message['estimate_tokens'] for message in full_history]) + 2
-            message_context = [self.build_message(message['role'], message['content']) for message in full_history]
-            if estimate_tokens > remain_tokens:
-                message_context = [self.build_message(message['role'], message['summary'] if message[
-                                                                                                 'role'] == 'assistant' and 'summary' in message and 'auto_continue' in message else
-                message['content']) for message in full_history]
-                estimate_tokens = sum([message['summary_tokens'] if message[
-                                                                        'role'] == 'assistant' and 'summary' in message and 'auto_continue' in message else
-                                       message['estimate_tokens'] for message in full_history]) + 2
-                if estimate_tokens > remain_tokens:
-                    message_context = [self.build_message(message['role'], message['summary'] if message[
-                                                                                                     'role'] == 'assistant' and 'summary' in message else
-                    message['content']) for message in full_history]
-                    estimate_tokens = sum([message['summary_tokens'] if message[
-                                                                            'role'] == 'assistant' and 'summary' in message else
-                                           message['estimate_tokens'] for message in full_history]) + 2
-                    if estimate_tokens > remain_tokens:
-                        message_context_tokens = [
-                            message['summary_tokens'] if message['role'] == 'assistant' and 'summary' in message else
-                            message['estimate_tokens'] for message in full_history]
-                        if len(message_context) >= 5 and sum(message_context_tokens[:3]) < remain_tokens:
-                            while (sum(message_context_tokens) + 2 > remain_tokens):
-                                remove_index = -1
-                                for i in range(message_context):
-                                    if message_context[i]['role'] == 'assistant':
-                                        remove_index = i
-                                        break
-                                if remove_index == -1:
-                                    for i in range(message_context):
-                                        if i > 1 and message_context[i]['role'] == 'user':
-                                            remove_index = i
-                                            break
-                                    if remove_index == -1:
-                                        break
-                                message_context.pop(remove_index)
-                                message_context_tokens.pop(remove_index)
-        message_context.append({"role": "user", "content": prompt})
+            # estimate_tokens = sum([message['estimate_tokens'] for message in full_history]) + 2
+
+            message_context = self.history2message_context(cxt.state.value)
+            # message_context = [self.build_message(message['role'], message['content']) for message in cxt.state.value]
+            # if estimate_tokens > remain_tokens:
+            #     message_context = [self.build_message(message['role'], message['summary'] if message[
+            #                                                                                      'role'] == 'assistant' and 'summary' in message and 'auto_continue' in message else
+            #     message['content']) for message in full_history]
+            #     estimate_tokens = sum([message['summary_tokens'] if message[
+            #                                                             'role'] == 'assistant' and 'summary' in message and 'auto_continue' in message else
+            #                            message['estimate_tokens'] for message in full_history]) + 2
+            #     if estimate_tokens > remain_tokens:
+            #         message_context = [self.build_message(message['role'], message['summary'] if message[
+            #                                                                                          'role'] == 'assistant' and 'summary' in message else
+            #         message['content']) for message in full_history]
+            #         estimate_tokens = sum([message['summary_tokens'] if message[
+            #                                                                 'role'] == 'assistant' and 'summary' in message else
+            #                                message['estimate_tokens'] for message in full_history]) + 2
+            #         if estimate_tokens > remain_tokens:
+            #             message_context_tokens = [
+            #                 message['summary_tokens'] if message['role'] == 'assistant' and 'summary' in message else
+            #                 message['estimate_tokens'] for message in full_history]
+            #             if len(message_context) >= 5 and sum(message_context_tokens[:3]) < remain_tokens:
+            #                 while (sum(message_context_tokens) + 2 > remain_tokens):
+            #                     remove_index = -1
+            #                     for i in range(message_context):
+            #                         if message_context[i]['role'] == 'assistant':
+            #                             remove_index = i
+            #                             break
+            #                     if remove_index == -1:
+            #                         for i in range(message_context):
+            #                             if i > 1 and message_context[i]['role'] == 'user':
+            #                                 remove_index = i
+            #                                 break
+            #                         if remove_index == -1:
+            #                             break
+            #                     message_context.pop(remove_index)
+            #                     message_context_tokens.pop(remove_index)
+
         context_tokens = sum(
             [estimate_used_tokens(message['content']) + estimate_used_tokens(message['role']) + 4 for message in
              message_context]) + 2
@@ -349,7 +393,7 @@ class GptBaseApi:
             tool_choice=NOT_GIVEN if self.tools == [] else "auto"
         )
 
-    def post_a_streaming_chat(self, input_prompt, context_type, parameters, full_history):
+    def post_a_streaming_chat(self, input_prompt, context_type, parameters, state):
         """post 串流形式的對話
 
         Args:
@@ -361,6 +405,7 @@ class GptBaseApi:
         Returns:
 
         """
+        full_history = cxt.state.value
         if context_type == ContextType.globals:
             full_history[0]["content"] = full_history[0]["content"] + '/n' + input_prompt
             full_history[0]["estimate_tokens"] = estimate_used_tokens(full_history[0]["content"],
@@ -377,27 +422,25 @@ class GptBaseApi:
             'role'] == 'user' and full_history[-2]['content'] == 'input_prompt':
             pass
         elif input_prompt:
-            cxt.status_word = '執行中...'
+
             # 調用openai.ChatCompletion.create來生成機器人的回答
             estimate_tokens = estimate_used_tokens(input_prompt) + estimate_used_tokens('user',
                                                                                         model_name=self.API_MODEL) + 4
-            message_context, context_tokens = self.process_context(input_prompt, context_type, full_history)
+            message_context, context_tokens = self.process_context(input_prompt, context_type)
             partial_words = ''
             token_counter = 0
             # payload = self.parameters2payload(self.API_MODEL, message_context,parameters)
-            full_history.append({"role": "user", "content": input_prompt, "context_type": context_type,
-                                 "estimate_tokens": estimate_tokens})
-            cxt.status_word = '執行中...'
-            full_history.append({"role": "assistant", "content": partial_words, "context_type": context_type})
+            # full_history.append({"role": "user", "content": input_prompt, "context_type": context_type,
+            #                      "estimate_tokens": estimate_tokens})
+            cxt.citations = []
+            self.temp_state.append({"role": "assistant", "content": partial_words, "context_type": context_type})
             completion = self.make_response(self.api_model, message_context, parameters, stream=True)
-
-            yield full_history
 
             tool_calls = []
             start = True
             finish_reason = 'None'
             try:
-
+                self.temp_state = [s for s in self.temp_state if s['role'] != 'status']
                 for chunk in completion:
                     try:
                         this_choice = chunk_message = chunk.choices[0]
@@ -407,47 +450,32 @@ class GptBaseApi:
                             break
                         elif this_delta and this_delta.content:
                             partial_words += this_delta.content
-                            full_history[-1]['content'] = cxt.status_word if len(
-                                partial_words) < 5 else partial_words
-                            token_counter += 1
-                        #
-                        # if not this_delta.function_call and not this_delta.tool_calls:
-                        #     if start:
-                        #         continue
-                        #     else:
-                        #         break
-                        start = False
-                        if this_delta.function_call:
-                            if index == len(tool_calls):
-                                tool_calls.append({})
-                            if delta.function_call.name:
-                                tool_calls[index]['function']['name'] = delta.function_call.name
-                                tool_calls[index]['function']['arguments'] = ''
-                                cxt.status_word = "解析使用工具需求..."
-                            if delta.function_call.arguments:
-                                tool_calls[index]['function']['arguments'] += (
-                                    delta.function_call.arguments)
-                        elif this_delta.tool_calls:
-                            tool_call = this_delta.tool_calls[0]
-                            index = tool_call.index
-                            if index == len(tool_calls):
-                                tool_calls.append({})
-                            if tool_call.id:
-                                tool_calls[index]['id'] = tool_call.id
-                                tool_calls[index]['type'] = 'function'
-                            if tool_call.function:
-                                if 'function' not in tool_calls[index]:
-                                    tool_calls[index]['function'] = {}
-                                if tool_call.function.name:
-                                    tool_calls[index]['function']['name'] = tool_call.function.name
-                                    tool_calls[index]['function']['arguments'] = ''
-                                    cxt.status_word = "解析使用工具需求..."
+                            for i in range(len(self.temp_state)):
+                                if self.temp_state[-i]['role'] == 'assistant':
+                                    self.temp_state[-i]['content'] = partial_words
+                                    break
+                                yield full_history
 
-                                if tool_call.function.arguments:
-                                    tool_calls[index]['function']['arguments'] += (
-                                        tool_call.function.arguments)
-
-                        yield full_history
+                        if this_delta.tool_calls:
+                            self.temp_state = [s for s in self.temp_state if s['role'] != 'status']
+                            self.temp_state.append({"role": "status", "content": '解析使用工具需求...'})
+                            for tool_call in this_delta.tool_calls:
+                                index = tool_call.index
+                                if index == len(tool_calls):
+                                    tool_calls.append({})
+                                if tool_call.id:
+                                    tool_calls[index]['id'] = tool_call.id
+                                    tool_calls[index]['type'] = 'function'
+                                if tool_call.function:
+                                    if 'function' not in tool_calls[index]:
+                                        tool_calls[index]['function'] = {}
+                                    if tool_call.function.name:
+                                        tool_calls[index]['function']['name'] = tool_call.function.name
+                                        tool_calls[index]['function']['arguments'] = ''
+                                    if tool_call.function.arguments:
+                                        tool_calls[index]['function']['arguments'] += (
+                                            tool_call.function.arguments)
+                                yield full_history
 
                         if finish_reason == 'stop':
                             break
@@ -461,27 +489,27 @@ class GptBaseApi:
                         PrintException()
                         gr.Error(str(e))
 
-                    yield full_history
-                print('')
+
             except Exception as e:
                 finish_reason = '[EXCEPTION]'
                 print(e)
                 PrintException()
             # 檢查finish_reason是否為length
+            print('finish_reason:', finish_reason, flush=True)
             while finish_reason == 'length':
                 # 自動以user角色發出「繼續寫下去」的PROMPT
                 prompt = "繼續"
                 # 調用openai.ChatCompletion.create來生成機器人的回答
-                message_context, context_tokens = self.process_context(prompt, context_type, full_history)
+                message_context, context_tokens = self.process_context(prompt, context_type)
                 # payload = self.parameters2payload(self.API_MODEL, message_context, self.API_PARAMETERS)
                 completion2 = self.make_response(self.api_model, message_context, parameters, stream=True)
-                full_history[-1]['auto_continue'] = 1 if 'auto_continue' not in full_history[-1] else full_history[-1][
-                                                                                                          'auto_continue'] + 1
+                # full_history[-1]['auto_continue'] = 1 if 'auto_continue' not in full_history[-1] else full_history[-1][
+                #                                                                                           'auto_continue'] + 1
                 finish_reason = 'None'
 
                 for chunk in completion2:
                     try:
-                        this_choice = chunk_message = chunk.choices[0]
+                        this_choice = chunk.choices[0]
                         this_delta = this_choice.delta
                         finish_reason = this_choice.finish_reason
                         # if (
@@ -491,8 +519,12 @@ class GptBaseApi:
 
                         if this_choice.delta.content is not None:
                             partial_words += this_delta.content
-                            full_history[-1]['content'] = partial_words
+                            for i in range(len(self.temp_state)):
+                                if self.temp_state[-i]['role'] == 'assistant':
+                                    self.temp_state[-i]['content'] = partial_words
+                                    break
                             token_counter += 1
+                        yield full_history
                     except Exception as e:
                         finish_reason = '[EXCEPTION]'
                         if len(partial_words) == 0:
@@ -504,32 +536,30 @@ class GptBaseApi:
             # 檢查接續後的完整回覆是否過長
             # print('bot_output: ',len(bot_output))
 
-            if tool_calls:
+            while len(tool_calls) > 0:
                 # Step 3: call the function
                 # Note: the JSON response may not always be valid; be sure to handle errors
-                available_functions = {
-                    "query_sql": database_tools.query_sql,
-                    "webpage_reader": web_tools.webpage_reader,
-                    "generate_diagram": diagram_tools.generate_diagram
-                }  # only one function in this example, but you can have multiple
 
-                message_context.append({
+                cxt.state.value.append({
                     'role': 'assistant',
-                    'content': "none",
+                    'content': None,
                     'tool_calls': tool_calls
                 })
 
                 for tool_call in tool_calls:
                     function_name = tool_call['function']['name']
-                    cxt.status_word = "啟用工具:" + function_name
+                    self.temp_state = [s for s in self.temp_state if s['role'] != 'status']
+                    self.temp_state.append({"role": "status", "content": '使用工具:{0}中...'.format(function_name)})
+                    try:
+                        function_to_call = get_tool(function_name)
 
-                    function_to_call = available_functions[function_name]
-
-                    function_args = json.loads(tool_call['function']['arguments'])
-
-                    function_response = function_to_call(**function_args)
-
-                    message_context.append(
+                        function_args = json.loads(tool_call['function']['arguments'])
+                        yield full_history
+                        function_response = function_to_call(**function_args)
+                    except Exception as e:
+                        function_response = str(e)
+                    print('function_response', function_name, function_response, flush=True)
+                    cxt.state.value.append(
                         {
                             "tool_call_id": tool_call['id'],
                             "role": "tool",
@@ -537,59 +567,130 @@ class GptBaseApi:
                             "content": function_response
                         }
                     )
-
-                    # message_context.append(
-                    #     {
-                    #         "tool_call_id": tool_call['id'],
-                    #         "role": "tool",
-                    #         "name": function_name,
-                    #         "content": eval(function_response),
-                    #     }
-                    # )
-                    # full_history.append(message_context[-1])
-                    # if message_context[-1]['content'] is None:
-                    #     message_context[-1]['content'] = ''
-                    # message_context[-1]['content'] += '\n' + function_response
-
+                tool_calls = []
                 second_response = self.client.chat.completions.create(
                     model=self.API_MODEL,
-                    messages=message_context,
+                    messages=self.history2message_context(cxt.state.value),
                     stream=True,
                     temperature=0.1,
                     n=1,
                     tools=self.tools,
-                    tool_choice="none"
+                    tool_choice="auto"
                 )
+                is_placeholder = False
+                placeholder_start_index = None
+                self.temp_state = [s for s in self.temp_state if s['role'] != 'status']
                 for second_chunk in second_response:
-                    this_second_choice = chunk_message = second_chunk.choices[0]
+                    this_second_choice = second_chunk.choices[0]
                     this_second_delta = this_second_choice.delta
                     finish_reason = this_second_choice.finish_reason
                     if not this_second_delta:
                         break
                     elif this_second_delta and this_second_delta.content:
                         partial_words += this_second_delta.content
-                        full_history[-1]['content'] = partial_words
-                        token_counter += 1
-                        yield full_history
+                        partial_words_without_placeholder = partial_words
+                        if not is_placeholder:
+                            if '@' in this_second_delta.content:
+                                is_placeholder = True
+                                placeholder_start_index = len(partial_words) - 1
 
-            full_history[-1]["estimate_tokens"] = estimate_used_tokens(partial_words,
-                                                                       model_name=self.API_MODEL) + estimate_used_tokens(
-                'assistant', model_name=self.API_MODEL) + 4
-            cxt.status_word = ''
-            yield full_history
+                        else:
+                            placeholder_candidate = partial_words[placeholder_start_index:]
+                            if len(placeholder_candidate) <= len('@Placeholder(') and not '@Placeholder('.startswith(
+                                    placeholder_candidate):
+                                is_placeholder = False
+                                placeholder_start_index = None
+                            else:
+                                if len(placeholder_candidate) < len('@Placeholder(') and '@Placeholder('.startswith(
+                                        placeholder_candidate):
+                                    partial_words_without_placeholder = partial_words[:placeholder_start_index]
+                                else:
+                                    maybe_placeholder = False
+                                    for k in list(cxt.placeholder_lookup.keys()):
+                                        lookup_key = '@Placeholder({0})'.format(k)
+                                        if lookup_key == placeholder_candidate or lookup_key in placeholder_candidate:
+                                            partial_words = partial_words.replace(lookup_key, cxt.placeholder_lookup[k])
+                                            partial_words_without_placeholder = partial_words
+                                            del cxt.placeholder_lookup[k]
+                                            is_placeholder = False
+                                            placeholder_start_index = None
+                                            break
+                                        elif lookup_key.startswith(placeholder_candidate):
+                                            maybe_placeholder = True
+                                            break
+                                    if not maybe_placeholder:
+                                        is_placeholder = False
+                                        placeholder_start_index = None
+                                    else:
+                                        partial_words_without_placeholder = partial_words[:placeholder_start_index]
+
+                        for i in range(len(self.temp_state)):
+                            if self.temp_state[-i]['role'] == 'assistant':
+                                self.temp_state[-i]['content'] = partial_words_without_placeholder
+                                break
+                        yield full_history
+                        token_counter += 1
+
+                    if this_second_delta.tool_calls:
+                        self.temp_state = [s for s in self.temp_state if s['role'] != 'status']
+                        self.temp_state.append({"role": "status", "content": '解析使用工具需求...'})
+                        for tool_call in this_second_delta.tool_calls:
+                            index = tool_call.index
+                            if index == len(tool_calls):
+                                tool_calls.append({})
+                            if tool_call.id:
+                                tool_calls[index]['id'] = tool_call.id
+                                tool_calls[index]['type'] = 'function'
+                            if tool_call.function:
+                                if 'function' not in tool_calls[index]:
+                                    tool_calls[index]['function'] = {}
+                                if tool_call.function.name:
+                                    tool_calls[index]['function']['name'] = tool_call.function.name
+                                    tool_calls[index]['function']['arguments'] = ''
+                                if tool_call.function.arguments:
+                                    tool_calls[index]['function']['arguments'] += (
+                                        tool_call.function.arguments)
+                        yield full_history
+                _placeholders = find_all_placeholders(partial_words)
+                # print('找到{0}個佔位符'.format(len(_placeholders)), _placeholders)
+                if len(_placeholders) > 0:
+                    for _placeholder_id in _placeholders:
+                        if _placeholder_id in cxt.placeholder_lookup:
+                            partial_words = partial_words.replace('@Placeholder({0})'.format(_placeholder_id),
+                                                                  cxt.placeholder_lookup[_placeholder_id])
+
+                if len(cxt.citations) > 0:
+                    partial_words = partial_words + '\n' + '\n'.join(cxt.citations)
+                cxt.citations = []
+
+                if len(_placeholders) > 0:
+                    for _placeholder_id in _placeholders:
+                        if _placeholder_id in cxt.placeholder_lookup:
+                            del cxt.placeholder_lookup[_placeholder_id]
+                cxt.state.value.append(
+                    {"role": "assistant", "content": partial_words,
+                     "estimate_tokens": estimate_used_tokens(partial_words,
+                                                             model_name=self.API_MODEL) + estimate_used_tokens(
+                         'assistant', model_name=self.API_MODEL) + 4})
+                if len(tool_calls) > 0:
+                    partial_words = ''
+                    self.temp_state.append(
+                        {"role": "assistant", "content": partial_words, "context_type": context_type})
+                else:
+                    self.temp_state = []
+                yield full_history
 
             if len(partial_words) > 200:
-                summarization_text = self.summarize_text(partial_words, 60)
-                full_history[-1]['summary'] = summarization_text
-                full_history[-1]['summary_tokens'] = estimate_used_tokens(summarization_text,
-                                                                          model_name=self.API_MODEL) + estimate_used_tokens(
-                    'assistant', model_name=self.API_MODEL) + 4
+                def summerize_it(partial_words, **kwargs):
+                    summarization_text = self.summarize_text(partial_words, 60)
+                    _session = context._context()
+                    for i in range(len(_session.state.value)):
+                        if _session.state.value[-i]['role'] == 'assistant':
+                            _session.state.value[-i]['summary'] = summarization_text
+                            _session.state.value[-i]['summary_tokens'] = estimate_used_tokens(summarization_text)
+                            break
 
-            full_history[-1]["estimate_tokens"] = estimate_used_tokens(partial_words,
-                                                                       model_name=self.API_MODEL) + estimate_used_tokens(
-                'assistant', model_name=self.API_MODEL) + 4
-
-            answer = full_history[-1]['content']
+                threading.Thread(target=summerize_it, args=(partial_words,)).start()
             yield full_history
 
     def post_and_get_streaming_answer(self, message_context, parameters, full_history=[]):
@@ -636,7 +737,7 @@ class GptBaseApi:
                 # 自動以user角色發出「繼續寫下去」的PROMPT
                 prompt = "繼續"
                 # 調用openai.ChatCompletion.create來生成機器人的回答
-                message_context, context_tokens = self.process_context(prompt, context_type, full_history)
+                message_context, context_tokens = self.process_context(prompt, context_type)
                 completion2 = self.make_response(self.API_MODEL, message_context, parameters, stream=True)
 
                 for chunk in completion2:
@@ -658,7 +759,7 @@ class GptBaseApi:
                             break
                     answer = full_history[-1]['content']
                     yield answer, full_history
-            cxt.status_word = ''
+
             full_history[-1]["estimate_tokens"] = estimate_used_tokens(partial_words, model_name=self.API_MODEL)
             answer = full_history[-1]['content']
             yield answer, full_history

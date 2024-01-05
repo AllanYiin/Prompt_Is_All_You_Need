@@ -9,7 +9,7 @@
         "properties": {
           "dt": {
             "type": "string",
-            "description": "diagram type:'flowchart', 'sequenceDiagram', 'classDiagram', 'stateDiagram', 'erDiagram','journey', 'gantt', 'gitGraph', 'pie', 'mindmap', 'quadrantChart', 'xychart'"
+            "description": "diagram type: 'mindmap','flowchart', 'sequenceDiagram', 'classDiagram', 'stateDiagram', 'erDiagram','journey', 'gantt', 'gitGraph', 'pie', 'quadrantChart', 'xychart'"
           },
           "mc": {
             "type": "string",

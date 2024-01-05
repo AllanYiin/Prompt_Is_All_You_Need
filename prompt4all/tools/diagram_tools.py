@@ -13,6 +13,8 @@ import time
 import subprocess
 import tempfile
 import uuid
+import os
+from sys import stderr, stdout
 
 client = OpenAI()
 client._custom_headers['Accept-Language'] = 'zh-TW'
@@ -73,7 +75,7 @@ def generate_mermaid_diagram(graph):
 
 
 mermaid_charts = ['flowchart', 'sequenceDiagram', 'classDiagram', 'stateDiagram', 'erDiagram',
-                  'journey', 'gantt', 'gitGraph', 'pie', 'mindmap.md', 'quadrantChart', 'xychart']
+                  'journey', 'gantt', 'gitGraph', 'pie', 'mindmap', 'quadrantChart', 'xychart']
 
 
 def extract_code(text):
@@ -143,46 +145,49 @@ def generate_diagram(di, dt, ss=None):
 
 def exec_mermaid_cli(mermaid_markdown, diagram_type):
     temfolder = tempfile.gettempdir()
-    input_path = os.path.join(temfolder, uuid.uuid4() + '.mmd')
+    input_path = os.path.join(temfolder, str(uuid.uuid4().node) + '.mmd')
     with open(input_path, "w") as t:
         t.write(mermaid_markdown)
-
     output_path = './generate_images/{0}_{1}.png'.format(diagram_type, uuid.uuid4().node)
 
-    mm_args = ["mmdc", "-i", input_path, "-o", outfn]
+    mm_args = ["mmdc", "-i", input_path, "-o", output_path]
     p = subprocess.Popen(
-        mm_args, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=1)
-    p.communicate(input=None, timeout=60)
+        mm_args, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    output, error = p.communicate(input=None, timeout=60)
     if p.returncode == 0:
         return output_path
-    if p.returncode != 0:
-        raise RuntimeError(
-            "Mermaid exited with error:\n[stderr]\n%s\n"
-            "[stdout]\n%s" % (stderr, stdout)
-        )
-    if not os.path.isfile(output_path):
-        raise RuntimeError(
-            "Mermaid did not produce an output file:\n[stderr]\n%s\n"
-            "[stdout]\n%s" % (stderr, stdout)
-        )
+    else:
+
+        return "[output]\n%s\n[error]\n%s" % (output, error) + mermaid_markdown
 
 
 def get_diagram_guidelines(dt):
     if dt == 'sequenceDiagram':
-        return open("prompts / sequenceDiagram.md", encoding="utf-8").read()
+        return open("prompts/sequenceDiagram.md", encoding="utf-8").read()
     elif dt == 'flowchart':
-        return open("prompts / flowchart.md", encoding="utf-8").read()
+        return open("prompts/flowchart.md", encoding="utf-8").read()
     elif dt == 'mindmap':
-        return open("prompts / mindmap.md", encoding="utf-8").read()
+        return open("prompts/mindmap.md", encoding="utf-8").read()
+    elif dt == 'xychart':
+        return open("prompts/xychart.md", encoding="utf-8").read()
+    elif dt == 'pie':
+        return open("prompts/pie.md", encoding="utf-8").read()
+    elif dt == 'gantt':
+        return open("prompts/gantt.md", encoding="utf-8").read()
 
 
 def get_diagram(dt, mc, ra=1):
     diagram_path = exec_mermaid_cli(mc, dt)
-    if not diagram_path:
-        return "產生圖表失敗，請檢查圖表語法是否正確。"
+    if not diagram_path or not os.path.isfile(diagram_path) or not os.path.exists(diagram_path):
+        return "產生圖表失敗，請檢查圖表語法是否正確。{0}".format(diagram_path if diagram_path else '')
     encode_pecko = generate_mermaid_diagram(mc)
-    return_markdown = "<img src=\"{0}\" alt=\"{1}\" title=\"{2}\">".format(diagram_path, dt, dt) + "\n  " + \
-                      "[查看全屏圖表]({0}})\n  [在線編輯圖表]({1}})\n  ".format(
+    return_markdown = '![{0}]({1}  "{2}")'.format(
+        '由mermaid生成', diagram_path, dt) + "\n  " + \
+                      "[查看全屏圖表]({0})\n  [在線編輯圖表]({1})\n  ".format(
                           'https://mermaid.live/view#pako:' + encode_pecko,
                           'https://mermaid.live/edit#pako:' + encode_pecko)
-    return return_markdown
+    _place_holder_id = 'get_diagram_results_{0}'.format(str(uuid.uuid4().node))
+    _place_holder = '@Placeholder({0})'.format(_place_holder_id)
+    cxt.placeholder_lookup[_place_holder_id] = return_markdown
+    return "Mermaid圖表已經繪製完成，請在你的回覆內容需要呈現{0}之處改放置此佔位符字串作為代表:{1}".format(dt,
+                                                                                                          _place_holder)

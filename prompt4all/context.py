@@ -218,6 +218,8 @@ class _Context:
         self.whisper_model = None
         self.current_assistant = None
         self.assistants = []
+        self.placeholder_lookup = {}
+        self.citations = []
 
         if os.path.exists(os.path.join(self.get_prompt4all_dir(), 'session.json')):
             self.load_session(os.path.join(self.get_prompt4all_dir(), 'session.json'))
@@ -342,6 +344,8 @@ class _Context:
                 session.pop('print')
                 session.pop('current_assistant')
                 session.pop('assistant_state')
+                session.pop('placeholder_lookup')
+                session.pop('citations')
                 session['assistants'] = [a.json() if is_instance(a, "Assistant") else a for a in self.assistants]
                 session['baseChatGpt'] = self.baseChatGpt if isinstance(self.baseChatGpt,
                                                                         str) else self.baseChatGpt.api_model if self.baseChatGpt else None
