@@ -9,7 +9,6 @@ import pandas as pd
 from builtins import *
 from lxml import html
 from binascii import b2a_hex
-
 from itertools import chain
 import copy
 from PIL import Image
@@ -31,8 +30,19 @@ from pdfminer.high_level import extract_text_to_fp
 from prompt4all.context import *
 from prompt4all.utils.text_utils import *
 from tqdm import tqdm
+from urllib.parse import urlparse
+import requests
 
 __all__ = ["get_document_text", "PDF", "PDFPagex", "Table", "Row", "Headers"]
+
+make_dir_if_need('./download_pdfs')
+
+
+def is_local(url):
+    url_parsed = urlparse(url)
+    if url_parsed.scheme in ('file', ''):  # Possibly a local file
+        return os.path.exists(url_parsed.path)
+    return False
 
 
 class Headers(object):
@@ -138,7 +148,7 @@ class Table(object):
         return "Table :{0}".format(self.header.header_text)
 
 
-def get_chats(item: LTTextContainer):
+def get_chars(item: LTTextContainer):
     results = []
     for e in item._objs:
         if isinstance(e, LTTextLine):
@@ -146,18 +156,18 @@ def get_chats(item: LTTextContainer):
                 if isinstance(char, LTChar):
                     results.append(char)
         elif isinstance(e, LTTextBox):
-            results.append(get_chats(e))
+            results.append(get_chars(e))
     return results
 
 
-def get_most_font_name(item: LTTextContainer):
-    size_list = [c.fontname for c in get_chats(item)]
+def get_major_font_name(item: LTTextContainer):
+    size_list = [c.fontname for c in get_chars(item)]
     most_common = Counter(size_list).most_common(1)
     return most_common[0][0] if most_common else ''
 
 
-def get_most_font_size(item: LTTextContainer):
-    size_list = [c.height for c in get_chats(item)]
+def get_major_font_size(item: LTTextContainer):
+    size_list = [c.height for c in get_chars(item)]
     most_common = Counter(size_list).most_common(1)
     return most_common[0][0] if most_common else 8
 
@@ -184,27 +194,31 @@ class PDFPagex:
                       isinstance(e, LTTextContainer) and hasattr(e, 'index') and e.index not in self._table_text_areas]
         layout_arr = np.array([[[t.x0, t.y0], [t.x0, t.y1]] for t in text_areas])
         point_array = np.array(list(point1)).reshape((1, 1, 2))
-        distance_arr = np.sqrt(((layout_arr - point_array) ** 2).sum(axis=-1))
-        closest_idx = distance_arr.min(axis=-1).argmin()
-        return text_areas[closest_idx], distance_arr[closest_idx, 0]
+        if len(layout_arr) > 0:
+            distance_arr = np.sqrt(((layout_arr - point_array) ** 2).sum(axis=-1))
+            closest_idx = distance_arr.min(axis=-1).argmin()
+            return text_areas[closest_idx], distance_arr[closest_idx, 0]
+        return None, None
 
     def check_end_state(self, prev_text_area: LTTextContainer, current_text_area: LTTextContainer):
-        frequent_font_name = get_most_font_name(current_text_area)
-        prev_font_name = get_most_font_name(prev_text_area)
-        chars = get_chats(prev_text_area)
-        char = chars[-1]
-        is_end = True
-        full_rate = (char.x1 - prev_text_area.x0) / (prev_text_area.x1 - prev_text_area.x0)
-        overlapping_rate = (prev_text_area.x1 - prev_text_area.x0) / (current_text_area.x1 - current_text_area.x0)
-        if overlapping_rate < 0.5 or overlapping_rate > 2:
-            full_rate = 0.5
-        if ((char.x1 - prev_text_area.x0) / (prev_text_area.x1 - prev_text_area.x0) >= 0.9) and (
-                frequent_font_name == prev_font_name) and prev_text_area.get_text().strip()[-1] not in ['.', '。']:
-            return False
-        elif prev_text_area.get_text().strip()[-1] in ['-', ',', ':', ';']:
-            return False
-        else:
-            return True
+        frequent_font_name = get_major_font_name(current_text_area)
+        prev_font_name = get_major_font_name(prev_text_area)
+        chars = get_chars(prev_text_area)
+        if chars and len(chars) > 0:
+            char = chars[-1]
+            is_end = True
+            full_rate = (char.x1 - prev_text_area.x0) / (prev_text_area.x1 - prev_text_area.x0)
+            overlapping_rate = (prev_text_area.x1 - prev_text_area.x0) / (current_text_area.x1 - current_text_area.x0)
+            if overlapping_rate < 0.5 or overlapping_rate > 2:
+                full_rate = 0.5
+            if ((char.x1 - prev_text_area.x0) / (prev_text_area.x1 - prev_text_area.x0) >= 0.9) and (
+                    frequent_font_name == prev_font_name) and prev_text_area.get_text().strip()[-1] not in ['.', '。']:
+                return False
+            elif prev_text_area.get_text().strip()[-1] in ['-', ',', ':', ';']:
+                return False
+            else:
+                return True
+        return True
 
     @property
     def page_text(self):
@@ -215,7 +229,7 @@ class PDFPagex:
             if isinstance(element, LTTextContainer):
                 page_width = self.base.width
                 wh_ratio = builtins.abs((element.x1 - element.x0) / (element.y1 - element.y0))
-                frequent_font_height = get_most_font_size(element)
+                frequent_font_height = get_major_font_size(element)
 
                 txt = element.get_text().strip()
                 is_end = self.check_end_state(prev_item, element) if prev_item else False
@@ -229,8 +243,7 @@ class PDFPagex:
                 elif frequent_font_height < 6.5:
                     sys.stdout.write(
                         ' page {0}: text skip! frequent_font_height < 6.5  {1} {2}\n'.format(self.page_number,
-                                                                                             frequent_font_heighttxt,
-                                                                                             txt))
+                                                                                             frequent_font_height, txt))
                     pass
                 elif len(txt.split('\n')) / len(txt) > 0.3 and wh_ratio < 0.8:  # 直式的側邊修式字
                     sys.stdout.write(
@@ -299,26 +312,26 @@ class PDFPagex:
                     #
                     # img = Image.fromarray(arr)
 
-                    img.save(os.path.join(folder, filename + '_images',
-                                          '{0}_{1}.{2}'.format(self.page_number, lt_image.name,
-                                                               'png' if img.mode == "RGBA" else 'jpg')))
+                    # img.save(os.path.join(folder, filename + '_parsing',
+                    #                       '{0}_{1}.{2}'.format(self.page_number, lt_image.name,
+                    #                                            'png' if img.mode == "RGBA" else 'jpg')))
                     self._images[lt_image.name] = arr
                 except Exception as e:
                     try:
                         img = Image.open(io.BytesIO(lt_image.stream.get_data()))
 
-                        img.save(os.path.join(folder, filename + '_images',
-                                              '{0}_{1}.{2}'.format(self.page_number, lt_image.name,
-                                                                   'png' if img.mode == "RGBA" else 'jpg')))
+                        # img.save(os.path.join(folder, filename + '_parsing',
+                        #                       '{0}_{1}.{2}'.format(self.page_number, lt_image.name,
+                        #                                            'png' if img.mode == "RGBA" else 'jpg')))
                         if img:
                             self._images[lt_image.name] = np.array(img)
                     except:
                         img = Image.frombytes(mode="1", data=lt_image.stream.get_data(),
                                               size=lt_image.srcsize,
                                               decoder_name='raw')
-                        img.save(os.path.join(folder, filename + '_images',
-                                              '{0}_{1}.{2}'.format(self.page_number, lt_image.name,
-                                                                   'png' if img.mode == "RGBA" else 'jpg')))
+                        # img.save(os.path.join(folder, filename + '_parsing',
+                        #                       '{0}_{1}.{2}'.format(self.page_number, lt_image.name,
+                        #                                            'png' if img.mode == "RGBA" else 'jpg')))
                         if img:
                             self._images[lt_image.name] = np.array(img)
 
@@ -421,20 +434,34 @@ class PDFPagex:
 
 
 class PDF:
-    def __init__(self, fp_path, password=None):
+    def __init__(self, fp_path=None, password=None):
         """
         Args:
             fp_path (str): The file path of the PDF file to be processed.
             password (str, optional): The password for the PDF file, if it is password-protected. Defaults to None.
         Examples:
+        >>> import glob
+        >>> pdfs=glob.glob('C:/Users/Allan/Downloads/pdf解析/*.pdf')
+        >>> [PDF(p).parsing_save()  for p in pdfs]
         >>> pdf = PDF('C:/Users/Allan/Downloads/JOItmC-08-00107-v2.pdf')
         >>> print(pdf.pages)
 
         """
-        self.fp_path = fp_path
+        self.source = fp_path
+        if not is_local(fp_path):
+            import prompt4all.utils.web_utils as web_utils
+            r = requests.get(fp_path, stream=True)
+            with open(os.path.join('./download_pdfs', fp_path.split('/')[-1]), 'wb') as fd:
+                chunk_size = 4 * 1024
+                for chunk in r.iter_content(chunk_size):
+                    fd.write(chunk)
+            self.fp_path = os.path.join('./download_pdfs', fp_path.split('/')[-1])
+        else:
+            self.fp_path = fp_path
+
         self.title = ''
         folder, filename, ext = split_path(self.fp_path)
-        make_dir_if_need(os.path.join(folder, filename.replace('.', '_') + '_images'))
+        make_dir_if_need(os.path.join(folder, filename.replace('.', '_') + '_parsing'))
         self.password = password
         self.doc = None
         self.initial_doc()
@@ -451,8 +478,6 @@ class PDF:
             if len(p.images) > 0:
                 for k, img in p.images.items():
                     self._images[(p.page_number, k)] = img
-        print(self.pages_text)
-        print('')
 
     def initial_doc(self):
         fp = open(self.fp_path, 'rb')
@@ -519,6 +544,27 @@ class PDF:
     @property
     def images(self):
         return self._images
+
+    def parsing_save(self):
+        folder, filename, ext = split_path(self.fp_path)
+        filename = filename.replace('.', '_')
+        make_dir_if_need(os.path.join(folder, filename + '_parsing'))
+        for idx in range(len(self._pages)):
+            page = self._pages[idx]
+
+            for k, img in page.images.items():
+                img = Image.fromarray(img)
+                img.save(os.path.join(folder, filename + '_parsing',
+                                      '{0}_{1}.{2}'.format(page.page_number, k,
+                                                           'png' if img.mode == "RGBA" else 'jpg')))
+            for _table in page.tables:
+                with open(os.path.join(folder, filename + '_parsing',
+                                       'Table_{0}_{1}.txt'.format(page.page_number, _table.placeholder)), 'w',
+                          encoding='utf-8') as f:
+                    f.write(_table.to_table_string())
+            with open(os.path.join(folder, filename + '_parsing', 'Text_page_{0}.txt'.format(page.page_number)), 'w',
+                      encoding='utf-8') as f:
+                f.write(page.page_text)
 
 
 #
