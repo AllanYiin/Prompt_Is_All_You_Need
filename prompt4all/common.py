@@ -156,7 +156,7 @@ def get_function(fn_name, module_paths=None):
 def get_tool(tool_name: str):
     if tool_name is None:
         return None
-    fn_modules = ['prompt4all.tools.web_tools', 'prompt4all.tools.dialogue_tools', 'prompt4all.tools.image_tools',
+    fn_modules = ['prompt4all.tools.web_tools', 'prompt4all.tools.diagram_tools', 'prompt4all.tools.image_tools',
                   'prompt4all.tools.database_tools']
 
     try:
