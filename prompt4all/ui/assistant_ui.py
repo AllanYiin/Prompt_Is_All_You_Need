@@ -31,9 +31,15 @@ def message2chat():
                 else:
                     chat.append((None, current_message))
     if cxt.current_assistant and cxt.current_assistant.temp_state and len(cxt.current_assistant.temp_state) > 0:
+        last_status = None
         for i in range(len(cxt.current_assistant.temp_state)):
-            current_message = process_chat(cxt.current_assistant.temp_state[i])
-            chat.append((None, current_message))
+            if cxt.current_assistant.temp_state[i]['role'] == 'status':
+                last_status = process_chat(cxt.current_assistant.temp_state[i])
+            else:
+                current_message = process_chat(cxt.current_assistant.temp_state[i])
+                chat.append((None, current_message))
+        if last_status:
+            chat.append((None, last_status))
     if len(chat) > 0:
         return chat
     return None
@@ -93,11 +99,30 @@ def retrieve_assistant(assistant_id):
         cxt.assistants[idx] = my_assistant
         cxt.write_session()
         idx += 2
+    cxt.current_assistant = Assistant(my_assistant)
     assistants_dropdown = gr.Dropdown(choices=get_assistant_dropdown_list(), type='index',
                                       multiselect=False, show_label=False,
                                       value=get_assistant_dropdown_list()[idx],
                                       interactive=True)
-    return assistants_dropdown
+
+    chatbot = gr.Chatbot(value=message2chat,
+                         label=f"當前模型：{cxt.current_assistant.api_model}",
+                         elem_classes='chatbot', container=True, scale=4,
+                         render_markdown=True, min_width=550,
+                         avatar_images=["./images/avatar/human.png",
+                                        "./images/assistants/assistant01.png"],
+                         likeable=True,
+                         show_copy_button=True, bubble_full_width=True, show_share_button=True, every=1,
+                         layout="panel")
+
+    return assistants_dropdown, chatbot
+
+
+def new_thread():
+    cxt.assistant_state.value = []
+    cxt.current_assistant.temp_state = []
+    cxt.current_assistant.current_thread = None
+    return gr.Textbox(value=None, placeholder="什麼是LLM?", label="輸入文字後按enter", lines=5, max_lines=2000, scale=4)
 
 
 def clear_history():
@@ -133,7 +158,7 @@ def assistant_panel():
                                                    container=True, scale=5, show_label=False)
                         retreive_assistant = gr.Button(size='sm', min_width=32, value='🔄', scale=1, visible=False)
                     assistants_instructions = gr.TextArea(elem_classes="instructions_text", interactive=True, lines=10,
-                                                          min_width=240, container=True, show_label=True,
+                                                          min_width=240, show_label=True,
                                                           show_copy_button=True,
                                                           label='instructions')
                     assistants_model = gr.Dropdown(choices=get_model_dropdown_list(), type='value', interactive=True,
@@ -142,21 +167,13 @@ def assistant_panel():
                     tool_checkboxgroup = gr.Checkboxgroup(choices=["函數", "代碼解釋器", "知識庫"], label='工具')
                     assistants_files = gr.Dropdown(elem_classes="assistants_files", choices=[], type='value',
                                                    interactive=True, multiselect=True,
-                                                   min_width=240, show_label=False, visible=True)
+                                                   min_width=240, show_label=False, visible=False, container=False)
             with gr.Column(scale=3):
                 with gr.Column():
-                    chatbot = gr.Chatbot(value=message2chat, elem_id='chatbot', container=True, scale=4,
-                                         render_markdown=True, min_width=550,
-                                         avatar_images=["./images/avatar/human.png",
-                                                        "./images/assistants/assistant01.png"],
-                                         likeable=True,
-                                         show_copy_button=True, bubble_full_width=True, show_share_button=True, every=1,
-                                         layout="panel")
                     with gr.Group():
                         with gr.Row():
                             user_inputs = gr.Textbox(placeholder="什麼是LLM?",
-                                                     label="輸入文字後按enter", lines=5, max_lines=2000, scale=4)  # t
-
+                                                     label="輸入文字後按enter", lines=3, max_lines=2000, scale=2)  # t
                             with gr.Column():
                                 with gr.Row(variant='panel'):
                                     b1 = gr.Button(value='▶️', interactive=True, size='sm', scale=1, min_width=64)
@@ -164,6 +181,15 @@ def assistant_panel():
                                 with gr.Row(variant='compact'):
                                     b4 = gr.Button(value="💬", interactive=True, size='sm', scale=1, min_width=6, )
                                     b3 = gr.Button(value="🗑️", interactive=True, size='sm', scale=1, min_width=64)
+                    chatbot = gr.Chatbot(value=message2chat,
+                                         elem_classes='chatbot', container=True, scale=4,
+                                         render_markdown=True, min_width=550,
+                                         avatar_images=["./images/avatar/human.png",
+                                                        "./images/assistants/assistant01.png"],
+                                         likeable=True,
+                                         show_copy_button=True, bubble_full_width=True, show_share_button=True, every=1,
+                                         layout="panel")
+
                 with gr.Accordion("超參數", open=False):
                     top_p = gr.Slider(minimum=-0, maximum=1.0, value=1, step=0.05, interactive=True,
                                       label="限制取樣範圍(Top-p)", )
@@ -200,7 +226,7 @@ def assistant_panel():
                 tool_checkboxgroup = gr.Checkboxgroup(choices=["函數", "代碼解釋器", "知識庫"], label='工具',
                                                       visible=True)
                 assistants_files = gr.Dropdown(choices=[], type='value', interactive=True, multiselect=True,
-                                               min_width=240, show_label=False, visible=True)
+                                               min_width=240, show_label=False, visible=False)
 
             elif value == 1:
                 assistants_name = gr.Textbox(interactive=False, autoscroll=False, lines=1, max_lines=5,
@@ -223,7 +249,8 @@ def assistant_panel():
                                                min_width=240, show_label=False, visible=False)
             else:
                 myassistant = cxt.assistants[value - 2]
-                cxt.current_assistant = Assistant(assistant_id=myassistant.id)
+                cxt.current_assistant = Assistant(myassistant)
+
                 assistants_name = gr.Textbox(interactive=True, autoscroll=False, lines=1, max_lines=5,
                                              min_width=240,
                                              container=True, show_label=True, label='名稱', value=myassistant.name,
@@ -258,25 +285,48 @@ def assistant_panel():
                     value=get_assistant_files(myassistant.id, assistant_state) if "知識庫" in tool_values else [],
                     type='value',
                     interactive=True, multiselect=True,
-                    min_width=240, show_label=False, visible=True)
+                    min_width=240, show_label=False, visible=False)
+
         return assistant_state, assistants_name, retreive_assistant, assistants_id, assistants_instructions, assistants_model, tool_checkboxgroup, assistants_files
 
-    def run_assistant(user_input, state):
-        _, run = cxt.current_assistant.create_thread_and_run(user_input)
-        cxt.assistant_state.value.append({"role": "user", "content": user_input})
-        t = threading.Thread(target=cxt.current_assistant.wait_on_run, args=(run,))
-        t.start()
-        return state
+    def add_user_input(user_inputs, state):
+        if user_inputs:
+            cxt.assistant_state.value.append({"role": "user", "content": user_inputs})
+        chat = message2chat()
+        return chat, cxt.assistant_state.value
+
+    def run_assistant(user_inputs, state):
+        _, run = cxt.current_assistant.create_thread_and_run(user_inputs)
+        cxt.current_assistant.current_run = run
+        while True:
+            state = next(cxt.current_assistant.wait_on_run(state))
+            chat = message2chat()
+            if cxt.current_assistant.current_run.status in ["queued", "in_progress", "requires_action"]:
+                yield chat, cxt.assistant_state.value
+            else:
+                break
+        cxt.current_assistant.current_run = None
+        cxt.current_assistant.current_runsteps = None
+        chat = message2chat()
+        yield chat, cxt.assistant_state.value
+
+    def change_label():
+        return gr.update(label=f"當前模型：{cxt.current_assistant.api_model}")
 
     assistants_dropdown.change(dropdown_change, inputs=[assistants_dropdown, assistant_state],
                                outputs=[assistant_state, assistants_name, retreive_assistant, assistants_id,
                                         assistants_instructions, assistants_model, tool_checkboxgroup,
-                                        assistants_files])
+                                        assistants_files]).then(change_label, [], [chatbot])
     retreive_assistant.click(fn=retrieve_assistant, inputs=[assistants_id],
-                             outputs=[assistants_dropdown])
+                             outputs=[assistants_dropdown, chatbot])
     chatbot.change(show_progress=False, scroll_to_output=True)
     # b2.click(fn=None, inputs=None, outputs=None, cancels=cancel_handles)
-    b1.click(fn=run_assistant, inputs=[user_inputs, state], outputs=[state]).then(reset_textbox, [], [user_inputs])
+    b1.click(fn=add_user_input, inputs=[user_inputs, state], outputs=[chatbot, state]).then(fn=run_assistant,
+                                                                                            inputs=[user_inputs, state],
+                                                                                            outputs=[chatbot,
+                                                                                                     state]).then(
+        reset_textbox, [], [user_inputs])
     b3.click(fn=clear_history, inputs=[], outputs=[user_inputs])
+    b4.click(fn=new_thread, inputs=[], outputs=[user_inputs])
 
     return _panel
