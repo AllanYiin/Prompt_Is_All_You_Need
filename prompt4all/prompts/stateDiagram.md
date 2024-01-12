@@ -1,15 +1,14 @@
 # 設計繪製State圖的Mermaid語法指南
 
-
 # State圖的Mermaid語法指南
 
 ## Concept
 
- State圖用於描述系統的行為，表現為一系列有限的狀態及其轉換。
+State圖用於描述系統的行為，表現為一系列有限的狀態及其轉換。
 
 ## State
 
- 狀態圖有以用多種方式宣告`，最簡單的方式是指定一個stateid:
+狀態圖有以用多種方式宣告`，最簡單的方式是指定一個stateid:
 
 ```mermaid
 stateDiagram-v2
@@ -50,9 +49,6 @@ stateDiagram-v2
 
 特殊的狀態`[*]`表示圖表的開始或結束。
 
-
-
-
 ```mermaid
 stateDiagram-v2
     [*] --> s1
@@ -61,14 +57,11 @@ stateDiagram-v2
 
 ## Composite states
 
-
 複合狀態包含多個內部狀態
 
 In order to define a composite state you need to use the state keyword followed by an id and the body of the composite state between {}. See the example below:\
 
 * 不能在不同複合狀態的內部狀態之間定義轉換。
-
-
 
 ```mermaid
 stateDiagram-v2
@@ -80,7 +73,6 @@ stateDiagram-v2
 ```
 
 You can do this in several layers:
-
 
 ```mermaid
 stateDiagram-v2
@@ -130,7 +122,6 @@ add```
 
 有時需要在兩條或多條路徑之間進行選擇，可以使用`<<choice>>`來實現。
 
-
 ```mermaid
 stateDiagram-v2
     state if_state <<choice>>
@@ -143,7 +134,6 @@ stateDiagram-v2
 ## Forks
 
 It is possible to specify a fork in the diagram using <<fork>> <<join>>.
-
 
 ```mermaid
 stateDiagram-v2
