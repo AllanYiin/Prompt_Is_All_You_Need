@@ -9,13 +9,15 @@ import numpy as np
 from collections import OrderedDict
 from urllib.parse import urlencode, unquote
 import markdownify
-from scipy.ndimage import gaussian_filter
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag, NavigableString
+from selenium import webdriver
+from selenium.webdriver.common.by import By
 from prompt4all.common import *
 from prompt4all.utils.text_utils import seg_as_sentence
+from prompt4all.utils.markdown_utils import HTML2Text, htmltable2markdown
 
-__all__ = ["search_google", "search_bing"]
+__all__ = ["search_google", "search_bing", "user_agents"]
 
 # import chromedriver_binary
 # from selenium import webdriver
@@ -123,17 +125,18 @@ def search_bing(query: str) -> list:
     response = session.get(search_url, headers=headers)
     time.sleep(0.5)
     soup = BeautifulSoup(response.text, 'html.parser')
-    results = soup.find_all('span', class_='c_tlbxTrg')
+    total_words = len(soup.text)
+
+    def h2_with_a(tag):
+        return tag.name == 'h2' and tag.find_all('a')
+
+    results = soup.find_all(h2_with_a)
+    titles = [t.text for t in results]
+    hrefs = [t.find_all('a')[0]['href'] for t in results]
+
+    # results = soup.find_all('span', class_='c_tlbxTrg')
     contentinfos = soup.find_all('div', class_='b_caption')
     snippet_texts = []
-
-    hrefs = re.findall(r"<h2><a [^>]+href=\"([^\"]+)\"", response.text)
-    # hrefs = [[unquote(h.split('=')[-1]) for h in href.split(';') if h.startswith('psq=')][0] if href.startswith(
-    #     'https://www.bing.com/ck') else href for href in hrefs]
-    titles = re.findall(r"<h2><a [^>]*>(.*?)</a></h2>", response.text)
-    clean = re.compile('<.*?>')
-    titles = [re.sub(clean, '', t) for t in titles]
-
     for (t, h, c) in zip(titles, hrefs, contentinfos):
         try:
             txt = c.contents[0].contents[0].text
@@ -159,11 +162,12 @@ def search_google(query: str) -> list:
         list: 包含搜索結果的清單。每個結果是一個字典，包含 'title'（標題）, 'link'（鏈接）和 'snippet'（摘要）。
 
     Examples:
+        >>> search_google("https://www.google.com/search?q=site:www.secom.com.tw+%E9%87%91%E5%BA%AB")
+        []
         >>> search_google("提示工程+prompt engineering")
         [{'title': '...', 'link': '...', 'snippet': '...'}, ...]
 
-        >>> search_google("github.com openai")
-        []
+
 
     注意:
         - 此函數使用 requests 和 BeautifulSoup 模塊來解析 Google 的搜索結果頁面。
@@ -171,9 +175,11 @@ def search_google(query: str) -> list:
         - 如果搜索無結果或發生連接錯誤，將返回空清單。
     """
     if 'https://www.google.com/search' in query:
+        # url_parts = query.strip().split('q=')
+        # search_url = url_parts[0] + 'q=' + url_parts[-1].strip().replace(' ', '%2B').replace('+', '%2B').replace(':','%3A')
         search_url = query
     else:
-        query = urlencode({"q": query.replace(' ', '+')}).replace('%2B', '+')
+        query = urlencode({"q": query.strip().replace(' ', '+')}).replace('%2B', '+')
         search_url = f"https://www.google.com/search?{query}"
 
     headers = {
@@ -266,7 +272,7 @@ def search_answer(query: str):
     return memo
 
 
-def search_web(url: str):
+def search_web(url: str) -> list:
     """
 
     Args:
@@ -276,41 +282,95 @@ def search_web(url: str):
     Returns:
 
     Examples:
-        >>> search_web("https://www.livingplus.com.tw/shop/shop/%E5%B1%85%E5%AE%B6%E7%94%A8%E5%93%81/%E5%B1%85%E5%AE%89%E9%98%B2%E8%AD%B7/%E4%BF%9D%E9%9A%AA%E7%AE%B1/%E7%99%BC%E5%84%84%E9%87%91%E5%BA%ABst17w%E6%99%BA%E6%85%A7%E5%9E%8B%E4%BF%9D%E9%9A%AA%E7%AE%B1")
+        >>> search_web("https://zh.wikipedia.org/zh-tw/2024%E5%B9%B4%E4%B8%AD%E8%8F%AF%E6%B0%91%E5%9C%8B%E7%B8%BD%E7%B5%B1%E9%81%B8%E8%88%89%E6%B0%91%E6%84%8F%E8%AA%BF%E6%9F%A5")
         []
 
     """
+    print(cyan_color("search_web:{0}".format(url)), flush=True)
+    if url.startswith('http://') or url.startswith('https://'):
+        headers = {'User-Agent': random.choice(user_agents)}
+        # session = requests.Session()
+        # session.headers.update(headers)
+        # response = session.get(url, headers=headers, allow_redirects=True)
+        # 建立Chrome瀏覽器物件
+        resulttext = ''
+        title = ''
 
-    headers = {
-        'User-Agent': random.choice(user_agents)}
-    session = requests.Session()
-    session.headers.update(headers)
-    response = session.get(url, headers=headers)
-    if response.status_code == 200:
-        soup = BeautifulSoup(response.text, 'html.parser')
-        title = soup.find('title').text
-        [tag.decompose() for tag in soup.find_all(class_="collapse")]
-        [data.decompose() for data in
-         soup(['style', 'script', 'nav', 'a', 'button', 'input', 'select', 'option', 'dd', 'dt', 'dl'])]
-        total_words = len(soup.text)
+        driver = webdriver.Chrome()
+        driver.maximize_window()
+        driver.get(url)
+        driver.implicitly_wait(3)
+        _divs = driver.find_elements(By.TAG_NAME, 'div')
+        head = driver.find_elements(By.TAG_NAME, 'head')
+        body = driver.find_element(By.TAG_NAME, 'body')
+        window_rect = driver.get_window_rect()
+        window_width = body.rect['width']
+        window_height = body.rect['height']
+        banners = []
+        contents = []
+        for d in _divs:
+            try:
+                if d.rect['height'] * d.rect['width'] == 0:
+                    pass
+                elif d.rect['height'] / d.rect['width'] > 5 and d.rect['height'] > 0.5 * window_height and (
+                        d.rect['x'] < window_height / 4 or d.rect['x'] > 3 * window_height / 4):
+                    banners.append(d)
+                elif d.rect['width'] / d.rect['height'] > 5 and d.rect['width'] > 0.5 * window_width and (
+                        d.rect['y'] < window_height / 4 or d.rect['y'] > 3 * window_height / 4):
+                    banners.append(d)
+                elif 0.5 < d.rect['width'] / d.rect['height'] < 2 and d.rect['width'] > 0.5 * window_width and d.rect[
+                    'height'] > 0.5 * window_height and (d.rect['y'] < window_height / 3):
+                    contents.append(d)
+                else:
+                    pass
+            except Exception as e:
+                print(e)
 
-        def no_div_children(tag):
-            return tag.name == 'div' and (
-                    len(tag.text.strip()) > 10 or float(len(tag.text.strip())) / total_words > 0.05) and not [d for
-                                                                                                              d in
-                                                                                                              tag.find_all(
-                                                                                                                  'div')
-                                                                                                              if (
-                                                                                                                      len(d.text.strip()) > 10 or float(
-                                                                                                                  len(d.text.strip())) / total_words > 0.05)] and check_useful_html_tag(
-                tag)
+        final_content = []
 
-        divs = soup.find_all(no_div_children)
+        for c in contents:
+            c_html = c.get_attribute('innerHTML')
+            if len([b for b in banners if b.get_attribute('innerHTML') in c_html]) == 0:
+                if len(final_content) == 0 or c_html not in final_content[-1].get_attribute('innerHTML'):
+                    final_content.append(c)
+        if len(final_content) > 0:
+            content_html = '<html>' + head[0].get_attribute('innerHTML') + '<body>' + ''.join(
+                [c.get_attribute('innerHTML') for c in final_content]) + '</body></html>'
+            html = content_html
+        else:
+            html = driver.page_source
+        driver.close()
 
-        content = '\n'.join(['\n'.join(list(div.stripped_strings)) for div in divs])
-        return content, title, response.status_code
-    else:
-        return None, '', response.status_code
+        if html:
+            # tables = htmltable2markdown(html)
+
+            soup = BeautifulSoup(html, 'html.parser')
+            if soup.find('title'):
+                title = soup.find('title').text.strip()
+
+            [data.decompose() for data in
+             soup(['style', 'script', 'nav', 'button', 'input', 'select', 'option', 'dd', 'dt', 'dl', 'abbr'])]
+            tables = htmltable2markdown(soup.prettify(formatter=None))
+            _tables = soup.find_all("table")
+            for idx in range(len(_tables)):
+                t = _tables[idx]
+                tag = Tag(soup, name="div")
+                text = NavigableString("@placeholder-table-{0}".format(idx))
+                tag.insert(0, text)
+                t.replaceWith(tag)
+
+            h = HTML2Text(baseurl=url)
+            resulttext = h.handle(soup.prettify(formatter=None))
+
+            for idx in range(len(tables)):
+                t = tables[idx]
+                resulttext = resulttext.replace("@placeholder-table-{0}".format(idx), t)
+
+            # content = '\n'.join(['\n'.join(list(div.stripped_strings)) for div in divs])
+            return resulttext, title, 200
+        else:
+            return None, '', 200
+    return None, '', 400
 
 
 def parse_html(html: str) -> str:

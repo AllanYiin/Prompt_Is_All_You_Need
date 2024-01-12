@@ -8,7 +8,7 @@
       "properties": {
         "link": {
           "type": "string",
-          "description": "The URL to search, if not provided by the user or you have no idea this value can be none"
+          "description": "The URL to search, if not provided by the user  'https://www.google.com/search?q=keyword1+keyword2' could be a choice, you have no idea this value can be None"
         },
         "ur": {
           "type": "string",

@@ -5,6 +5,7 @@ import copy
 import random
 from collections import OrderedDict
 from prompt4all import context
+from prompt4all.common import *
 from prompt4all.context import *
 from prompt4all.utils import regex_utils, web_utils
 from prompt4all.tools.database_tools import save_knowledge_base
@@ -77,15 +78,15 @@ def webpage_reader(link: str, ur: str, l: str, it: str, lp: bool = False, rt: bo
     if 'www.statista.com' in link and lv == 0:
         link = 'https://www.google.com/search?' + urlencode({"q": ur.replace(' ', '+')}).replace('%2B', '+')
 
-    if ur and (link is None or link == 'none') and not ur.startswith('site:'):
-        search_lists = better_search(ur)
+    if ur and (link is None or link == 'none' or link == '') and not ur.startswith('site:'):
+        search_lists = web_utils.search_google(ur)
         threads = []
         for i in range(len(search_lists['webpage_list'])):
             item = search_lists['webpage_list'][i]
             if 'url' in item:
                 _url = item['url']
                 _title = item['title']
-                threads.append(threading.Thread(target=process_browse, args=(_url, _title)))
+                threads.append(threading.Thread(target=process_browse, args=(_url, _title, returnData)))
 
         for i in range(len(threads)):
             threads[i].start()
@@ -122,7 +123,7 @@ def webpage_reader(link: str, ur: str, l: str, it: str, lp: bool = False, rt: bo
         return json.dumps(search_lists, ensure_ascii=False)
     else:
 
-        new_results, title, status_code = web_utils.search_web(link, True if it == 'table' else False)
+        new_results, title, status_code = web_utils.search_web(link)
         if status_code != 200 or new_results is None or len(new_results) < 200:
             part_id = uuid.uuid4()
             data = {
@@ -133,7 +134,6 @@ def webpage_reader(link: str, ur: str, l: str, it: str, lp: bool = False, rt: bo
                 "rt": rt
             }
 
-            cxt.status_word = '查詢{0}中...'.format(link)
             print(data, 'it:' + it)
             endpoint = "https://webreader.webpilotai.com/api/visit-web"
             resp = requests.post(endpoint, headers=header, data=json.dumps(data))
@@ -259,7 +259,7 @@ def get_search_list(ur: str, content: str):
         str: The processed content.
 
     """
-    cxt.status_word = '整理「{0}｣搜尋結果清單中...'.format(ur)
+
     _json_schema = {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "type": "object",
@@ -402,60 +402,62 @@ def get_knowledge_list(ur, content: str, l: str):
 
 
 def get_table_list(content: str, url):
-    _json_schema = {
-        "$schema": "http://json-schema.org/draft-07/schema#",
-        "type": "object",
-        "properties": {
-            "tables": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "title": {
-                            "type": "string",
-                            "description": "The title of the table"
-                        },
-                        "description": {
-                            "type": "string",
-                            "description": "A brief description of the table"
-                        },
-                        "source": {
-                            "type": "string",
-                            "format": "url",
-                            "description": "The URL of the web page where the table is extracted from"
-                        },
-                        "table": {
-                            "type": "string",
-                            "description": "The table formatted as markdown"
-                        }
-                    },
-                    "required": ["title", "table", "url"]
-                }
-            }
-        },
-        "required": ["tables"]
-    }
+    tables = regex.findall(regex_utils.md_table_pattern, content)
 
-    _prompt = '請將以下來自於{0}內容中表格形式的數據，然後依照{1} schema來進行整理為表格列表，若無案例則回傳空字典 "\n"""\n{2}\n"""\n'.format(
-        url, _json_schema, content)
-    response = client.chat.completions.create(
-        model="gpt-3.5-turbo-1106",
-        messages=[
-            {'role': 'system', 'content': '#zh-TW'},
-            {'role': 'user', 'content': _prompt}
-        ],
-        temperature=0.3,
-        response_format={"type": "json_object"},
-        n=1,
-        stream=False,
-
-    )
-    response_message = response.choices[0].message
-    print(response_message.content)
-    for item in json.loads(response_message.content)['tables']:
-        cxt.citations.append('![table](../images/table.png) [{0}]({1})'.format(item['title'], url))
-
-    return response_message.content
+    # _json_schema = {
+    #     "$schema": "http://json-schema.org/draft-07/schema#",
+    #     "type": "object",
+    #     "properties": {
+    #         "tables": {
+    #             "type": "array",
+    #             "items": {
+    #                 "type": "object",
+    #                 "properties": {
+    #                     "title": {
+    #                         "type": "string",
+    #                         "description": "The title of the table"
+    #                     },
+    #                     "description": {
+    #                         "type": "string",
+    #                         "description": "A brief description of the table"
+    #                     },
+    #                     "source": {
+    #                         "type": "string",
+    #                         "format": "url",
+    #                         "description": "The URL of the web page where the table is extracted from"
+    #                     },
+    #                     "table": {
+    #                         "type": "string",
+    #                         "description": "The table formatted as markdown"
+    #                     }
+    #                 },
+    #                 "required": ["title", "table", "url"]
+    #             }
+    #         }
+    #     },
+    #     "required": ["tables"]
+    # }
+    #
+    # _prompt = '請將以下source為{0}內容中表格形式的數據，然後依照{1} schema來進行整理為表格列表，若無案例則回傳空字典 "\n"""\n{2}\n"""\n'.format(
+    #     url, _json_schema, content)
+    # response = client.chat.completions.create(
+    #     model="gpt-3.5-turbo-1106",
+    #     messages=[
+    #         {'role': 'system', 'content': '#zh-TW'},
+    #         {'role': 'user', 'content': _prompt}
+    #     ],
+    #     temperature=0.3,
+    #     response_format={"type": "json_object"},
+    #     n=1,
+    #     stream=False,
+    #
+    # )
+    # response_message = response.choices[0].message
+    # print(response_message.content)
+    # for item in json.loads(response_message.content)['tables']:
+    #     cxt.citations.append('![table](../images/table.png) [{0}]({1})'.format(item['title'], url))
+    print(yellow_color('  \n\n'.join(['\n'.join(list(t)) for t in tables])))
+    return '  \n\n'.join(['\n'.join(list(t)) for t in tables])
 
 
 def get_pdf_content(pdf_url):

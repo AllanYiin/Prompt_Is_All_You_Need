@@ -3,7 +3,8 @@ import regex
 __all__ = [
     "choice_pattern", "delta_pattern", "json_pattern", 'numbered_list_member_pattern', 'unordered_listitem_pattern',
     "replace_special_chars", 'extract_score', 'extract_code', 'triplequote_pattern', 'is_numbered_list_member',
-    'is_unordered_list_member', 'extract_numbered_list_member']
+    'is_unordered_list_member', 'extract_numbered_list_member', 'find_all_placeholders', 'md_table_pattern']
+
 choice_pattern = regex.compile(r'"choices":\s*\[(\{.*?\})\]')
 
 delta_pattern = regex.compile(r'"delta":\s*{"content":"([^"]*)"}')
@@ -16,6 +17,27 @@ unordered_listitem_pattern = regex.compile(r"\s*([-*+])\s+(.*)$")
 numbered_list_member_pattern = regex.compile(r'\s*(\d+(\.\d+)*\.?)(?=\s)')
 
 code_pattern = regex.compile(r'```(.*?)```')
+
+md_table_pattern = regex.compile(r"^(\|.*\|)\r?\n\|([ :-]+)\|\r?\n(\|(.*\|)+)", regex.MULTILINE)
+
+
+def find_all_placeholders(text):
+    """
+    從給定的文本中提取所有的占位符。
+
+    :param text: 包含占位符的字符串。
+    :return: 包含所有占位符的列表。
+
+    Examples:
+        >>> find_all_placeholders('Where is the @placeholder??  @Placeholder(getdiagram_result220102), can you tell me?')
+        ['@Placeholder(get_diagram_result_220102)']
+
+    """
+    pattern = r"@Placeholder\((\w+)\)"
+    # pattern = r'\s*@Placeholder(.*?)\s*'  # 建立正則表達式的規則
+    matches = regex.findall(pattern, text)  # 使用 re.findall() 方法找出所有匹配的字串
+
+    return matches
 
 
 def replace_special_chars(input_str):
