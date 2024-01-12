@@ -30,7 +30,7 @@ def nlu_api(text_input):
         jstrs = json_pattern.findall(cxt.baseChatGpt.post_and_get_answer(conversation, _parameters))
         jstrs = jstrs[0] if len(jstrs) == 1 else '[' + ', '.join(jstrs) + ']'
         output_json = json.loads(jstrs)
-        # results.append(output_json)
+        results.append(output_json)
 
         yield json.dumps(results, ensure_ascii=False, indent=3)
 
