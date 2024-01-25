@@ -21,93 +21,12 @@ from prompt4all.utils.tokens_utils import estimate_used_tokens
 from prompt4all import context
 from prompt4all.context import *
 
-client = OpenAI()
-
-client._custom_headers['Accept-Language'] = 'zh-TW'
 cxt = context._context()
 
-__all__ = ["model_info", "GptBaseApi"]
+client = AzureOpenAI()
+client._custom_headers['Accept-Language'] = 'zh-TW'
 
-model_info = {
-    # openai
-    "gpt-3.5-turbo": {
-        "endpoint": 'https://api.openai.com/v1/chat/completions',
-        "max_token": 4096
-    },
-    "gpt-4-1106-preview": {
-        "endpoint": 'https://api.openai.com/v1/chat/completions',
-        "max_token": 128000
-    },
-    "gpt-4-vision-preview": {
-        "endpoint": 'https://api.openai.com/v1/chat/completions',
-        "max_token": 128000
-    },
-    "gpt-4": {
-        "endpoint": 'https://api.openai.com/v1/chat/completions',
-        "max_token": 8192
-    },
-
-    "gpt-3.5-turbo-0613": {
-        "endpoint": 'https://api.openai.com/v1/chat/completions',
-        "max_token": 4096
-    },
-    "gpt-3.5-turbo-16k-0613": {
-        "endpoint": 'https://api.openai.com/v1/chat/completions',
-        "max_token": 16385
-    },
-    "gpt-3.5-turbo-1106": {
-        "endpoint": 'https://api.openai.com/v1/chat/completions',
-        "max_token": 16385
-    },
-
-    "gpt-4-0613": {
-        "endpoint": 'https://api.openai.com/v1/chat/completions',
-        "max_token": 8192
-    },
-    "gpt-4-0314": {
-        "endpoint": 'https://api.openai.com/v1/chat/completions',
-        "max_token": 8192
-    },
-
-    "gpt-4-32k": {
-        "endpoint": 'https://api.openai.com/v1/chat/completions',
-        "max_token": 32768
-    },
-
-    "gpt-4-32k-0314": {
-        "endpoint": 'https://api.openai.com/v1/chat/completions',
-        "max_token": 32768
-    },
-    "azure gpt-3.5-turbo": {
-        "endpoint": 'https://prd-gpt-scus.openai.azure.com',
-        "max_token": 4096
-    },
-    "azure 2023-03-15-preview": {
-        "api_version": "2023-03-15-preview",
-        "endpoint": 'https://ltc-to-openai.openai.azure.com/',
-        "max_token": 4096
-    },
-
-    "azure gpt-4": {
-        "endpoint": 'https://prd-gpt-scus.openai.azure.com',
-        "max_token": 8192
-    },
-
-    "azure gpt-4-0314": {
-        "endpoint": 'https://prd-gpt-scus.openai.azure.com',
-        "max_token": 8192
-    },
-
-    "azure gpt-4-32k": {
-        "endpoint": 'https://prd-gpt-scus.openai.azure.com',
-        "max_token": 32768
-    },
-
-    "azure gpt-4-32k-0314": {
-        "endpoint": 'https://prd-gpt-scus.openai.azure.com',
-        "max_token": 32768
-    }
-}
+__all__ = ["GptBaseApi"]
 
 
 class GptBaseApi:
@@ -429,9 +348,7 @@ class GptBaseApi:
             message_context, context_tokens = self.process_context(input_prompt, context_type)
             partial_words = ''
             token_counter = 0
-            # payload = self.parameters2payload(self.API_MODEL, message_context,parameters)
-            # full_history.append({"role": "user", "content": input_prompt, "context_type": context_type,
-            #                      "estimate_tokens": estimate_tokens})
+
             cxt.citations = []
             self.temp_state.append({"role": "assistant", "content": partial_words, "context_type": context_type})
             completion = self.make_response(self.api_model, message_context, parameters, stream=True)
@@ -555,6 +472,7 @@ class GptBaseApi:
 
                         function_args = json.loads(tool_call['function']['arguments'])
                         yield full_history
+                        print(blue_color('tool_call:{0}  {1}'.format(function_name, function_args)), flush=True)
                         function_response = function_to_call(**function_args)
                     except Exception as e:
                         function_response = str(e)
@@ -661,6 +579,7 @@ class GptBaseApi:
 
                 if len(cxt.citations) > 0:
                     partial_words = partial_words + '\n' + '\n'.join(cxt.citations)
+                    print('citations', cyan_color('\n' + '\n'.join(cxt.citations)))
                 cxt.citations = []
 
                 if len(_placeholders) > 0:

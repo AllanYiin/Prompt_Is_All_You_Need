@@ -7,7 +7,7 @@ import threading
 from prompt4all import context
 from prompt4all.context import *
 from prompt4all.common import *
-import openai
+import gradio as gr
 from openai import OpenAI, AsyncOpenAI, AzureOpenAI, AsyncAzureOpenAI, RequestOptions
 from openai._types import NotGiven, NOT_GIVEN
 from openai.types.beta.assistant import Assistant as openai_Assistant
@@ -132,24 +132,23 @@ class Assistant(GptBaseApi):
                     if self.current_run.status == "requires_action":
                         tool_outputs = []
                         for tool_call in run.required_action.submit_tool_outputs.tool_calls:
-                            if tool_call.type == "function":
-                                name = tool_call.function.name
-                                self.temp_state.append(
-                                    {"role": "status", "content": '使用工具{0}中...'.format(name)})
-                                yield cxt.assistant_state.value
-                                arguments = json.loads(tool_call.function.arguments)
-                                tool_function = get_tool(tool_call.function.name)
-                                if tool_function:
-                                    results = tool_function(**arguments)
-                                    print(tool_call.function.name, arguments, yellow_color(results), flush=True)
-                                    tool_outputs.append({
-                                        "tool_call_id": tool_call.id,
-                                        "output": results,
-                                    })
-                                else:
+                            if tool_call:
+                                if tool_call.type == "function":
+                                    name = tool_call.function.name
                                     self.temp_state.append(
-                                        {"role": "status", "content": '找不到對應工具:{0}'.format(name)})
-                                    yield cxt.assistant_state.value
+                                        {"role": "status", "content": '使用工具{0}中...'.format(name)})
+                                    arguments = json.loads(tool_call.function.arguments)
+                                    tool_function = get_tool(tool_call.function.name)
+                                    if tool_function:
+                                        results = tool_function(**arguments)
+                                        print(tool_call.function.name, arguments, yellow_color(results), flush=True)
+                                        tool_outputs.append({
+                                            "tool_call_id": tool_call.id,
+                                            "output": results,
+                                        })
+                                    else:
+                                        self.temp_state.append(
+                                            {"role": "status", "content": '找不到對應工具:{0}'.format(name)})
                         self.current_run = client.beta.threads.runs.submit_tool_outputs(
                             run_id=run.id,
                             thread_id=self.current_thread.id,
@@ -232,6 +231,7 @@ class Assistant(GptBaseApi):
                 break
             except Exception as e:
                 response = client.beta.threads.delete(self.current_thread.id)
+                PrintException()
                 raise gr.Error(str(e))
-        
+
         yield cxt.assistant_state.value

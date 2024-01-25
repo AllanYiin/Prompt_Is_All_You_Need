@@ -13,6 +13,7 @@ from prompt4all import context
 from prompt4all.context import split_path
 from prompt4all.common import unpack_singleton
 from prompt4all.utils.chatgpt_utils import *
+
 __all__ = ["ConversationHistory", "Conversation", "Message", "Mapping", "Content", "Author",
            "initialize_conversation_history"]
 
@@ -105,13 +106,13 @@ class Mapping:
         super(Mapping, self).__init__()
         self.id = mapping_id
         self.message = message if message is not None else Message(message_id=mapping_id, author=Author(role=None),
-                               content=Content(content_type="text", parts=[""]),
-                               metadata={}, status="default")
+                                                                   content=Content(content_type="text", parts=[""]),
+                                                                   metadata={}, status="default")
         self.parent = parent
         self.children = children
 
     def new_system_message_mapping(self):
-        self.message = Message(message_id= self.id, author=Author(role='system'),
+        self.message = Message(message_id=self.id, author=Author(role='system'),
                                content=Content(content_type="text", parts=[""]),
                                metadata={"is_user_system_message": True,
                                          "user_context_message_data": {
@@ -119,13 +120,13 @@ class Mapping:
         return self
 
     def new_user_message_mapping(self, input_prompt=""):
-        self.message = Message(message_id= self.id, author=Author(role='user'),
+        self.message = Message(message_id=self.id, author=Author(role='user'),
                                content=Content(content_type="text", parts=[input_prompt]),
                                metadata={"timestamp_": "absolute", "message_type": None}, recipient="all")
         return self
 
     def new_assistant_message_mapping(self, output_prompt=""):
-        self.message = Message(message_id= self.id, author=Author(role='assistant'),
+        self.message = Message(message_id=self.id, author=Author(role='assistant'),
                                content=Content(content_type="text", parts=[output_prompt]),
                                metadata={"finish_details": {"type": "stop", "stop_tokens": [0]}, "is_complete": False,
                                          "timestamp_": "absolute"}, recipient="all")
@@ -158,11 +159,11 @@ class Mapping:
 
 
 class Conversation:
-    def __init__(self,  conversation_id: str,
+    def __init__(self, conversation_id: str,
                  conversation_template_id: str = None, title: str = "new chat",
                  create_time: Union[int, datetime] = None, update_time: Union[int, datetime] = None,
                  mapping: Dict[str, Mapping] = None,
-                 moderation_results: List[str] = None, current_node: str = None, plugin_ids: str = None,**kwargs):
+                 moderation_results: List[str] = None, current_node: str = None, plugin_ids: str = None, **kwargs):
         super(Conversation, self).__init__()
         self.id = conversation_id
         self.conversation_id = conversation_id
@@ -179,11 +180,11 @@ class Conversation:
         if current_node is not None:
             self.current_node = current_node
         if mapping is not None:
-            self.mapping=mapping
+            self.mapping = mapping
 
         else:
-            self.mapping= OrderedDict()
-            mapping0 = Mapping(mapping_id= str(uuid.uuid4()), children=[])
+            self.mapping = OrderedDict()
+            mapping0 = Mapping(mapping_id=str(uuid.uuid4()), children=[])
             self.mapping[mapping0.id] = mapping0
             self.current_node = mapping0.id
             self.initialize_mapping()
@@ -201,18 +202,15 @@ class Conversation:
             return list(sorted([m for m in list(self.mapping.values()) if m is not None],
                                key=lambda x: x.message.create_time, reverse=True))[0]
 
-    def add_mapping(self, item:Mapping):
+    def add_mapping(self, item: Mapping):
         self.current_item.children.append(item.id)
-        item.parent=self.current_item.id
-        self.mapping[item.id]=item
-        self.current_node=item.id
+        item.parent = self.current_item.id
+        self.mapping[item.id] = item
+        self.current_node = item.id
+
     def initialize_mapping(self):
-        self.add_mapping(Mapping(mapping_id= str(uuid.uuid4()), parent=None, children=[]).new_system_message_mapping())
+        self.add_mapping(Mapping(mapping_id=str(uuid.uuid4()), parent=None, children=[]).new_system_message_mapping())
         self.add_mapping(Mapping(mapping_id=str(uuid.uuid4()), parent=None, children=[]).new_user_message_mapping(''))
-
-
-
-
 
     # def __dir__(self):
     #     keys = super(Conversation, self).__dir__()
@@ -303,30 +301,30 @@ class ConversationHistory:
     def __init__(self):
         super().__init__()
         self.conversations = []
-        self._selected_index=None
+        self._selected_index = None
 
     @property
     def selected_index(self):
         return self._selected_index
-    @selected_index.setter
-    def selected_index(self,value):
-        self._selected_index=value
 
+    @selected_index.setter
+    def selected_index(self, value):
+        self._selected_index = value
 
     def add(self, conversation: Conversation):
         self.conversations.append(conversation)
 
-
     def new_chat(self):
-        self.conversations.insert(0,Conversation(conversation_id= str(uuid.uuid4()), create_time=datetime.now(), update_time=datetime.now(),mapping=None, current_node=None, title="new chat"))
-        self._selected_index=0
+        self.conversations.insert(0, Conversation(conversation_id=str(uuid.uuid4()), create_time=datetime.now(),
+                                                  update_time=datetime.now(), mapping=None, current_node=None,
+                                                  title="new chat"))
+        self._selected_index = 0
 
     @property
     def selected_item(self):
-        if len(self.conversations)==0 or self._selected_index is None:
+        if len(self.conversations) == 0 or self._selected_index is None:
             self.new_chat()
         return self.conversations[self._selected_index]
-
 
     def get_all_messages(self, only_final=False, flatten=False):
         prompt_messages = [history.get_prompt_messages(only_final=only_final) for history in self.conversations]
@@ -370,10 +368,10 @@ class ConversationHistory:
                                             parent=value["parent"] if "parent" in value else None,
                                             children=value["children"] if "children" in value else None)
             data.pop("mapping")
-            cid=data["id"]
+            cid = data["id"]
             data.pop("id")
             data.pop("conversation_id")
-            self.add(Conversation(id=cid,conversation_id=cid,mapping=mapping_dict, **data))
+            self.add(Conversation(id=cid, conversation_id=cid, mapping=mapping_dict, **data))
 
     def save(self, save_path):
         if os.path.exists(save_path):
@@ -403,9 +401,5 @@ def initialize_conversation_history():
             with open(_conversation_history_path, 'r', encoding='utf-8-sig') as f:
                 _conversation_history.load(json.load(f))
         cxt.conversation_history = _conversation_history
-
-
-
-
-
-
+    cxt.databse_schema = open("examples/query_database/schema.txt",
+                              encoding="utf-8").read() if cxt.databse_schema is None else cxt.databse_schema
