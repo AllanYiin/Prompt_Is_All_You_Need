@@ -1,18 +1,20 @@
 # -*- coding: utf-8-sig -*-
 import base64
+import builtins
 import copy
 import io
-import regex
-import json
-import requests
+import time
 
+import regex
+import requests
 from PIL import Image
 from bs4 import BeautifulSoup
-from prompt4all.utils.tokens_utils import *
-from prompt4all.utils.regex_utils import *
-from prompt4all.utils.pdf_utils import *
-from prompt4all.common import *
 
+from prompt4all import context
+from prompt4all.utils.pdf_utils import *
+from prompt4all.utils.tokens_utils import *
+
+cxt = context._context()
 __all__ = ['process_chat', 'process_url', 'process_context', 'build_message', 'regular_txt_to_markdown',
            'get_next_paragraph']
 
@@ -25,12 +27,18 @@ def regular_txt_to_markdown(text):
 
 
 def process_chat(conversation_dict: dict):
+    if isinstance(conversation_dict, str):
+        conversation_dict = eval(conversation_dict)
     if conversation_dict['role'] == 'user':
-        return regular_txt_to_markdown(conversation_dict['content']) + "\n"
-    elif conversation_dict['role'] == 'assistant':
-        return regular_txt_to_markdown(conversation_dict['content']) + "\n"
+        return conversation_dict['content']
+    elif conversation_dict['role'] in ['assistant']:
+        return conversation_dict['content']
+    elif conversation_dict['role'] in ['status']:
+        if conversation_dict['content'].endswith('...'):
+            return conversation_dict['content'][:-3] + ''.join((['...'] * int(builtins.round(time.time(), 0) % 3 + 1)))
+        return conversation_dict['content']
     elif conversation_dict['role'] == 'system':
-        return conversation_dict['content'] + "\n"
+        return conversation_dict['content']
 
 
 def extract_urls_text(text):
@@ -135,11 +143,11 @@ def split_text(page_map):
     # if args.verbose: print(f"Splitting '{filename}' into sections")
 
     def find_page(offset):
-        l = len(page_map)
-        for i in range(l - 1):
-            if offset >= page_map[i][1] and offset < page_map[i + 1][1]:
+        _len = len(page_map)
+        for i in range(_len - 1):
+            if page_map[i][1] <= offset < page_map[i + 1][1]:
                 return i
-        return l - 1
+        return _len - 1
 
     all_text = "".join(p[2] for p in page_map)
     length = len(all_text)

@@ -1,17 +1,18 @@
-from chardet import detect
-import html.parser as HTMLParser
-import urllib.parse as urlparse
+import codecs
 import html.entities as htmlentitydefs
-import urllib.request as urllib
+import html.parser as HTMLParser
 import optparse
 import re
 import sys
-import codecs
-import types
+import urllib.parse as urlparse
+import urllib.request as urllib
 from textwrap import wrap
+
 from bs4 import BeautifulSoup
 
-__all__ = ["handle_markdown_escape_string", "HTML2Text", "htmltable2markdown"]
+__all__ = ["escape_markdown_characters", "HTML2Text", "htmltable2markdown"]
+
+# Refactored dictionary with markdown escape characters
 escape_chars = {
     "#": "\#",
     "*": "\*",
@@ -30,72 +31,88 @@ escape_chars = {
     "{": "\{",
     "}": "\}",
     "$": "\$",
-    "\\": "\\\\"
-}
+    "\\": "\\\\"}
 
 
-# 定義一個函數，接收一個字串作為參數，並將其中的所有markdown escape字元逸出
-def handle_markdown_escape_string(input_string):
-    # 建立一個空字串，用來儲存逸出後的結果
-    result = ""
-    # 遍歷字串中的每一個字元
-    for char in input_string:
-        # 如果字元是一個markdown escape字元，就將它替換成它的逸出版本，並加到結果字串中
-        if char in escape_chars:
-            result += escape_chars[char]
-        # 否則，就直接將字元加到結果字串中
-        else:
-            result += char
-    # 回傳結果字串
-    return result
+def escape_markdown_characters(input_string):
+    """
+    Escapes markdown characters in a given string.
+    Args:
+        input_string (str): The string to escape markdown characters in.
+    Returns:
+        str: String with markdown characters escaped.
+    """
+    return ''.join(escape_chars[char] if char in escape_chars else char for char in input_string)
 
 
-def regular_txt_to_markdown(text):
+# def convert_newlines_to_markdown(text):
+#     """
+#     Converts newlines in a text to markdown format.
+#     Args:
+#         text (str): The text to convert.
+#     Returns:
+#         str: Text with newlines converted to markdown format.
+#     """
+#     text = text.replace('
+# ', '
+# ').replace('
+#
+#
+# ', '
+#
+# ')
+#     return text
+
+def key_exists(obj, key):
+    """
+    Checks if a key exists in a dictionary or object.
+    Args:
+        obj: The dictionary or object to check in.
+        key: The key to check for.
+    Returns:
+        bool: True if key exists, False otherwise.
+    """
+    return key in obj
+
+
+def convert_newlines_to_markdown(text):
     text = text.replace('\n', '  \n')
     text = text.replace('\n\n\n', '\n\n')
     text = text.replace('\n\n\n', '\n\n')
     return text
 
 
-def has_key(x, y):
-    if hasattr(x, 'has_key'):
-        return x.has_key(y)
-    else:
-        return y in x
-
-
-# Use Unicode characters instead of their ascii psuedo-replacements
+# Configuration variables
 UNICODE_SNOB = True
-
-# Escape all special characters.  Output is less readable, but avoids corner case formatting issues.
 ESCAPE_SNOB = True
-
-# Put the links after each paragraph instead of at the end.
-LINKS_EACH_PARAGRAPH = True
-
+LINKS_EACH_PARAGRAPH = False
 BODY_WIDTH = 78
-# Don't show internal links (href="#local-anchor") -- corresponding link targets
-# won't be visible in the plain text file anyway.
 SKIP_INTERNAL_LINKS = True
-# Use inline, rather than reference, formatting for images and links
-INLINE_LINKS = True
-# Number of pixels Google indents nested lists
+INLINE_LINKS = False
 GOOGLE_LIST_INDENT = 36
-IGNORE_ANCHORS = False
-IGNORE_IMAGES = False
+IGNORE_ANCHORS = True
+IGNORE_IMAGES = True
 IGNORE_EMPHASIS = False
 
 
-### Entity Nonsense ###
-
-def name2cp(k):
-    if k == 'apos': return ord("'")
-    if hasattr(htmlentitydefs, "name2codepoint"):  # requires Python 2.3
-        return htmlentitydefs.name2codepoint[k]
+# Entity conversion functions and dictionaries
+def name_to_codepoint(name):
+    """
+    Convert an HTML entity name to a codepoint.
+    Args:
+        name (str): HTML entity name.
+    Returns:
+        int: Unicode codepoint corresponding to the entity.
+    """
+    if name == 'apos':
+        return ord("'")
+    if hasattr(htmlentitydefs, "name2codepoint"):
+        return htmlentitydefs.name2codepoint[name]
     else:
-        k = htmlentitydefs.entitydefs[k]
-        if k.startswith("&#") and k.endswith(";"): return int(k[2:-1])  # not in latin-1
-        return ord(codecs.latin_1_decode(k)[0])
+        entity = htmlentitydefs.entitydefs[name]
+        if entity.startswith("&#") and entity.endswith(";"):
+            return int(entity[2:-1])  # not in latin-1
+        return ord(codecs.latin_1_decode(entity)[0])
 
 
 unifiable = {'rsquo': "'", 'lsquo': "'", 'rdquo': '"', 'ldquo': '"',
@@ -108,65 +125,75 @@ unifiable = {'rsquo': "'", 'lsquo': "'", 'rdquo': '"', 'ldquo': '"',
              'ugrave': 'u', 'uacute': 'u', 'ucirc': 'u', 'uuml': 'u',
              'lrm': '', 'rlm': ''}
 
-unifiable_n = {}
-
-for k in unifiable.keys():
-    unifiable_n[name2cp(k)] = unifiable[k]
+unifiable_n = {name_to_codepoint(k): v for k, v in unifiable.items()}
 
 
-### End Entity Nonsense ###
+def is_only_whitespace(line):
+    """
+    Checks if a line consists only of whitespace characters.
+    Args:
+        line (str): The line to check.
+    Returns:
+        bool: True if the line contains only whitespace, False otherwise.
+    """
+    return line.strip() == ""
 
-def onlywhite(line):
-    """Return true if the line does only consist of whitespace characters."""
-    # 使用strip方法去除字串首尾的空白字符
-    stripped = line.strip()
-    # 如果去除後的字串為空，則返回True，否則返回False
-    return stripped == ""
 
-
-def hn(tag):
+def header_level(tag):
+    """
+    Determines the level of a header tag (e.g., h1, h2).
+    Args:
+        tag (str): The HTML tag to check.
+    Returns:
+        int: The level of the header (1-9), or 0 if not a valid header.
+    """
     if tag[0] == 'h' and len(tag) == 2:
         try:
-            n = int(tag[1])
-            if n in range(1, 10): return n
+            level = int(tag[1])
+            return level if 1 <= level <= 9 else 0
         except ValueError:
             return 0
 
 
-def dumb_property_dict(style):
-    """returns a hash of css attributes"""
-    return dict([(x.strip(), y.strip()) for x, y in [z.split(':', 1) for z in style.split(';') if ':' in z]]);
+def parse_style_attribute(style):
+    """
+    Parses a CSS style attribute into a dictionary.
+    Args:
+        style (str): The CSS style attribute.
+    Returns:
+        dict: A dictionary of CSS properties and their values.
+    """
+    return dict(pair.strip().split(':', 1) for pair in style.split(';') if ':' in pair)
 
 
-def dumb_css_parser(data):
-    """returns a hash of css selectors, each of which contains a hash of css attributes"""
-    # remove @import sentences
-    data += ';'
-    importIndex = data.find('@import')
-    while importIndex != -1:
-        data = data[0:importIndex] + data[data.find(';', importIndex) + 1:]
-        importIndex = data.find('@import')
-
-    # parse the css. reverted from dictionary compehension in order to support older pythons
-    elements = [x.split('{') for x in data.split('}') if '{' in x.strip()]
-    try:
-        elements = dict([(a.strip(), dumb_property_dict(b)) for a, b in elements])
-    except ValueError:
-        elements = {}  # not that important
-
-    return elements
+def parse_css(data):
+    """
+    Parses CSS data into a dictionary of selectors and their properties.
+    Args:
+        data (str): The CSS data to parse.
+    Returns:
+        dict: A dictionary of CSS selectors and properties.
+    """
+    # Removing @import sentences
+    data = data.replace('@import', '')
+    # Parsing CSS
+    elements = dict(pair.strip().split('{', 1) for pair in data.split('}') if '{' in pair)
+    return {selector: parse_style_attribute(styles) for selector, styles in elements.items()}
 
 
-def element_style(attrs, style_def, parent_style):
-    """returns a hash of the 'final' style attributes of the element"""
+def compute_element_style(attrs, style_def, parent_style):
+    """
+    Computes the final style attributes of an element based on its class and parent style.
+    Args:
+        attrs (dict): The element's attributes.
+        style_def (dict): The style definitions.
+        parent_style (dict): The parent element's style.
+    Returns:
+        dict: The computed style attributes.
+    """
     style = parent_style.copy()
-    if 'class' in attrs:
-        for css_class in attrs['class'].split():
-            css_style = style_def['.' + css_class]
-            style.update(css_style)
-    if 'style' in attrs:
-        immediate_style = dumb_property_dict(attrs['style'])
-        style.update(immediate_style)
+    for css_class in attrs.get('class', '').split():
+        style.update(style_def.get('.' + css_class, {}))
     return style
 
 
@@ -275,7 +302,7 @@ class HTML2Text(HTMLParser.HTMLParser):
         self.baseurl = baseurl
 
         try:
-            del unifiable_n[name2cp('nbsp')]
+            del unifiable_n[name_to_codepoint('nbsp')]
         except KeyError:
             pass
         unifiable['nbsp'] = '&nbsp_place_holder;'
@@ -301,7 +328,7 @@ class HTML2Text(HTMLParser.HTMLParser):
 
         self.outtext = self.outtext.join(self.outtextlist)
         if self.unicode_snob:
-            nbsp = chr(name2cp('nbsp'))
+            nbsp = chr(name_to_codepoint('nbsp'))
         else:
             nbsp = u' '
         self.outtext = self.outtext.replace(u'&nbsp_place_holder;', nbsp)
@@ -326,16 +353,16 @@ class HTML2Text(HTMLParser.HTMLParser):
 
             If the set of attributes is not found, returns None
         """
-        if not has_key(attrs, 'href'): return None
+        if 'href' not in attrs: return None
 
         i = -1
         for a in self.a:
             i += 1
             match = 0
 
-            if has_key(a, 'href') and a['href'] == attrs['href']:
-                if has_key(a, 'title') or has_key(attrs, 'title'):
-                    if (has_key(a, 'title') and has_key(attrs, 'title') and
+            if 'href' in a and a['href'] == attrs['href']:
+                if 'title' in a or 'title' in attrs:
+                    if ('title' in a and 'title' in attrs and
                             a['title'] == attrs['title']):
                         match = True
                 else:
@@ -426,18 +453,18 @@ class HTML2Text(HTMLParser.HTMLParser):
             if start:
                 if self.tag_stack:
                     parent_style = self.tag_stack[-1][2]
-                tag_style = element_style(attrs, self.style_def, parent_style)
+                tag_style = compute_element_style(attrs, self.style_def, parent_style)
                 self.tag_stack.append((tag, attrs, tag_style))
             else:
                 dummy, attrs, tag_style = self.tag_stack.pop()
                 if self.tag_stack:
                     parent_style = self.tag_stack[-1][2]
 
-        if hn(tag):
+        if header_level(tag):
             self.p()
             if start:
                 self.inheader = True
-                self.o(hn(tag) * "#" + ' ')
+                self.o(header_level(tag) * "#" + ' ')
             else:
                 self.inheader = False
                 return  # prevent redundant emphasis marks on headers
@@ -475,8 +502,8 @@ class HTML2Text(HTMLParser.HTMLParser):
 
         if tag == "blockquote":
             if start:
-                self.p();
-                self.o('> ', 0, 1);
+                self.p()
+                self.o('> ', 0, 1)
                 self.start = 1
                 self.blockquote += 1
             else:
@@ -501,7 +528,7 @@ class HTML2Text(HTMLParser.HTMLParser):
             if start:
                 self.abbr_title = None
                 self.abbr_data = ''
-                if has_key(attrs, 'title'):
+                if 'title' in attrs:
                     self.abbr_title = attrs['title']
             else:
                 if self.abbr_title != None:
@@ -511,7 +538,7 @@ class HTML2Text(HTMLParser.HTMLParser):
 
         if tag == "a" and not self.ignore_links:
             if start:
-                if has_key(attrs, 'href') and not (self.skip_internal_links and attrs['href'].startswith('#')):
+                if 'href' in attrs and not (self.skip_internal_links and attrs['href'].startswith('#')):
                     self.astack.append(attrs)
                     self.maybe_automatic_link = attrs['href']
                 else:
@@ -536,7 +563,7 @@ class HTML2Text(HTMLParser.HTMLParser):
                             self.o("][" + str(a['count']) + "]")
 
         if tag == "img" and start and not self.ignore_images:
-            if has_key(attrs, 'src'):
+            if 'src' in attrs:
                 attrs['href'] = attrs['src']
                 alt = attrs.get('alt', '')
                 self.o("![" + escape_md(alt) + "]")
@@ -649,7 +676,7 @@ class HTML2Text(HTMLParser.HTMLParser):
                 if not self.list:
                     bq += "    "
                 # else: list content is already partially indented
-                for i in xrange(len(self.list)):
+                for i in range(len(self.list)):
                     bq += "    "
                 data = data.replace("\n", "\n" + bq)
 
@@ -685,7 +712,7 @@ class HTML2Text(HTMLParser.HTMLParser):
                 for link in self.a:
                     if self.outcount > link['outcount']:
                         self.out("   [" + str(link['count']) + "]: " + urlparse.urljoin(self.baseurl, link['href']))
-                        if has_key(link, 'title'): self.out(" (" + link['title'] + ")")
+                        if 'title' in link: self.out(" (" + link['title'] + ")")
                         self.out("\n")
                     else:
                         newa.append(link)
@@ -706,7 +733,7 @@ class HTML2Text(HTMLParser.HTMLParser):
         if r'\/script>' in data: self.quiet -= 1
 
         if self.style:
-            self.style_def.update(dumb_css_parser(data))
+            self.style_def.update(parse_css(data))
 
         if not self.maybe_automatic_link is None:
             href = self.maybe_automatic_link
@@ -740,11 +767,11 @@ class HTML2Text(HTMLParser.HTMLParser):
             return unifiable[c]
         else:
             try:
-                name2cp(c)
+                name_to_codepoint(c)
             except KeyError:
                 return "&" + c + ';'
             else:
-                return chr(name2cp(c))
+                return chr(name_to_codepoint(c))
 
     def replaceEntities(self, s):
         s = s.group(1)
@@ -784,7 +811,7 @@ class HTML2Text(HTMLParser.HTMLParser):
                         result += "\n\n"
                         newlines = 2
                 else:
-                    if not onlywhite(para):
+                    if not is_only_whitespace(para):
                         result += para + "\n"
                         newlines = 1
             else:

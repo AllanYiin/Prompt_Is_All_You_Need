@@ -1,23 +1,67 @@
 import builtins
 import json
 import logging
-import re
 import random
+import re
+import copy
 import time
 import uuid
-import numpy as np
+import io
 from collections import OrderedDict
-from urllib.parse import urlencode, unquote
+from urllib.parse import urlencode
+from itertools import chain
 import markdownify
+import numpy as np
 import requests
 from bs4 import BeautifulSoup, Tag, NavigableString
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
+from prompt4all.context import *
 from prompt4all.common import *
-from prompt4all.utils.text_utils import seg_as_sentence
+from prompt4all.api.memories import *
 from prompt4all.utils.markdown_utils import HTML2Text, htmltable2markdown
+from prompt4all.utils.text_utils import seg_as_sentence
+from prompt4all.utils.regex_utils import count_words
+
+cxt = context._context()
+if cxt.memory is None:
+    cxt.memory = InMemoryCache()
+    cxt.memory.load()
 
 __all__ = ["search_google", "search_bing", "user_agents"]
+
+ignored_exceptions = (NoSuchElementException, StaleElementReferenceException,)
+
+
+def prepare_chrome_options():
+    chrome_options = Options()
+    chrome_options.add_argument('--headless')
+    chrome_options.add_argument('blink-settings=imagesEnabled=false')
+    chrome_options.add_argument('--disable-logging')
+    chrome_options.add_argument(f"--window-size=1920,1440")
+    chrome_options.add_argument('--hide-scrollbars')
+    chrome_options.add_argument('--disable-blink-features=AutomationControlled')
+    chrome_options.add_argument("--proxy-server='direct://'")
+    chrome_options.add_argument("--proxy-bypass-list=*")
+    chrome_options.add_argument('--ignore-certificate-errors')
+    chrome_options.add_argument("--password-store=basic")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--enable-automation")
+    chrome_options.add_argument("--disable-browser-side-navigation")
+    chrome_options.add_argument("--disable-web-security")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-infobars")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--disable-setuid-sandbox")
+    chrome_options.add_argument("--disable-software-rasterizer")
+    return chrome_options
+
 
 # import chromedriver_binary
 # from selenium import webdriver
@@ -147,6 +191,9 @@ def search_bing(query: str) -> list:
         except Exception as e:
             print('Connection Error')
             print(e)
+            PrintException()
+    if len(search_results) == 5:
+        search_results = search_results[:5]
 
     return search_results, session
 
@@ -162,7 +209,7 @@ def search_google(query: str) -> list:
         list: 包含搜索結果的清單。每個結果是一個字典，包含 'title'（標題）, 'link'（鏈接）和 'snippet'（摘要）。
 
     Examples:
-        >>> search_google("https://www.google.com/search?q=site:www.secom.com.tw+%E9%87%91%E5%BA%AB")
+        >>> search_google("https://www.google.com/search?q=%E8%8F%B1%E6%A0%BC%E7%B4%8B")
         []
         >>> search_google("提示工程+prompt engineering")
         [{'title': '...', 'link': '...', 'snippet': '...'}, ...]
@@ -196,7 +243,25 @@ def search_google(query: str) -> list:
         return tag.name == 'div' and 0.2 > float(len(tag.text)) / total_words > 0.02 and tag.find_all(
             'h3') and len(tag.find_all('a', href=True)) == 1
 
+    def div_with_media(tag):
+        return tag.name == 'div' and (
+                (len([t for t in tag.contents if
+                      t.name == 'img' and 'alt' in t.attrs and count_words(t.attrs['alt']) >= 8]) > 0)
+                or (len([t for t in tag.contents if t.name == 'a' and count_words(t.get('aria-label')) >= 10]) > 0
+                    and len([t for t in tag.find_all('svg')]) > 0))
+
     results = soup.find_all(no_div_children)
+    media_results = soup.find_all(div_with_media)
+    media_references = []
+    for tag in media_results:
+        vedio_url = [t.attrs['data-url'] for t in tag.find_all('div') if
+                     'dara-url' in t.attrs and len(t.attrs['data-url']) > 0]
+        if len(vedio_url) > 0:
+            cxt.citations.append(
+                '<video width="148" height="83" controls><source src="{0}" type="video/mp4"></video>'.format(
+                    vedio_url[0]))
+    if len(cxt.citations) > 0:
+        print('citations', cyan_color('\n' + '\n'.join(cxt.citations)))
     for r in results:
         part = BeautifulSoup(str(r), 'html.parser')
         links = part.find_all('a', href=True)
@@ -226,7 +291,9 @@ def search_google(query: str) -> list:
     #     snippet_text = snippet_texts[i]
     #     search_results.append({'title': title, 'link': href, 'snippet': snippet_text})
     search_results = list(search_results.values())
-    search_results = {'webpage_list': search_results}
+    if len(search_results) >= 5:
+        search_results = search_results[:5]
+    print('google search results:', green_color(str(search_results)), flush=True)
     return search_results, session
 
 
@@ -269,6 +336,7 @@ def search_answer(query: str):
             memo[s['link']] = html_text
         except Exception as e:
             print(e)
+            PrintException()
     return memo
 
 
@@ -282,92 +350,275 @@ def search_web(url: str) -> list:
     Returns:
 
     Examples:
-        >>> search_web("https://zh.wikipedia.org/zh-tw/2024%E5%B9%B4%E4%B8%AD%E8%8F%AF%E6%B0%91%E5%9C%8B%E7%B8%BD%E7%B5%B1%E9%81%B8%E8%88%89%E6%B0%91%E6%84%8F%E8%AA%BF%E6%9F%A5")
-        []
+        >>> search_web('https://en.wikipedia.org/wiki/Electric_vehicle_charging_station')
 
     """
     print(cyan_color("search_web:{0}".format(url)), flush=True)
+    text_frags = []
     if url.startswith('http://') or url.startswith('https://'):
-        headers = {'User-Agent': random.choice(user_agents)}
+        chrome_options = prepare_chrome_options()
+        chrome_options.add_argument('user-agent=%s' % random.choice(user_agents))
+
         # session = requests.Session()
         # session.headers.update(headers)
         # response = session.get(url, headers=headers, allow_redirects=True)
         # 建立Chrome瀏覽器物件
         resulttext = ''
         title = ''
-
-        driver = webdriver.Chrome()
-        driver.maximize_window()
-        driver.get(url)
-        driver.implicitly_wait(3)
-        _divs = driver.find_elements(By.TAG_NAME, 'div')
-        head = driver.find_elements(By.TAG_NAME, 'head')
-        body = driver.find_element(By.TAG_NAME, 'body')
-        window_rect = driver.get_window_rect()
-        window_width = body.rect['width']
-        window_height = body.rect['height']
         banners = []
         contents = []
-        for d in _divs:
-            try:
-                if d.rect['height'] * d.rect['width'] == 0:
-                    pass
-                elif d.rect['height'] / d.rect['width'] > 5 and d.rect['height'] > 0.5 * window_height and (
-                        d.rect['x'] < window_height / 4 or d.rect['x'] > 3 * window_height / 4):
-                    banners.append(d)
-                elif d.rect['width'] / d.rect['height'] > 5 and d.rect['width'] > 0.5 * window_width and (
-                        d.rect['y'] < window_height / 4 or d.rect['y'] > 3 * window_height / 4):
-                    banners.append(d)
-                elif 0.5 < d.rect['width'] / d.rect['height'] < 2 and d.rect['width'] > 0.5 * window_width and d.rect[
-                    'height'] > 0.5 * window_height and (d.rect['y'] < window_height / 3):
-                    contents.append(d)
-                else:
-                    pass
-            except Exception as e:
-                print(e)
+        driver = webdriver.Chrome(options=chrome_options)
+        driver.get(url)
 
-        final_content = []
+        driver.implicitly_wait(3)
+        try:
 
-        for c in contents:
-            c_html = c.get_attribute('innerHTML')
-            if len([b for b in banners if b.get_attribute('innerHTML') in c_html]) == 0:
-                if len(final_content) == 0 or c_html not in final_content[-1].get_attribute('innerHTML'):
-                    final_content.append(c)
-        if len(final_content) > 0:
-            content_html = '<html>' + head[0].get_attribute('innerHTML') + '<body>' + ''.join(
-                [c.get_attribute('innerHTML') for c in final_content]) + '</body></html>'
-            html = content_html
-        else:
+            body_rect = copy.deepcopy(driver.find_element(By.TAG_NAME, 'body').rect)
+            windows_rect = driver.get_window_rect()
+            window_width = body_rect['width']
+            window_height = body_rect['height']
+            head_html = driver.find_element(By.TAG_NAME, 'head').get_attribute('outerHTML')
+            body_html = driver.find_element(By.TAG_NAME, 'body').get_attribute('outerHTML')
+            driver.refresh()
+            for d in driver.find_elements(By.TAG_NAME, 'div'):
+                try:
+                    drect = copy.deepcopy(d.rect)
+                    drect['outerHTML'] = d.get_attribute('outerHTML').strip()
+                    drect['text'] = d.get_attribute("textContent").strip()
+                    if not d.is_displayed():
+                        pass
+                    elif drect['height'] * drect['width'] < 100:
+                        pass
+                    elif window_height > 0 and drect['height'] / float(window_height) > 0.6 and drect['width'] / float(
+                            window_width) > 0.6 and not (drect['x'] == 0 and drect['y'] == 0):
+                        if len(drect['text']) > 10:
+                            if len(contents) == 0 or drect['outerHTML'] not in contents[-1]['outerHTML']:
+                                if len(contents) > 0 and drect['text'] in contents[-1]['text'] and len(
+                                        drect['text']) > 50 and len(contents[-1]['text']) > 50:
+                                    pass
+                                else:
+                                    contents.append(drect)
+                    elif drect['height'] / drect['width'] > 5 and drect['height'] > 0.5 * window_height and (
+                            drect['x'] < window_height / 4 or drect['x'] > 3 * window_height / 4):
+                        if len(banners) == 0 or drect['outerHTML'] not in banners[-1]['outerHTML']:
+                            banners.append(drect)
+                    elif (drect['width'] / drect['height']) / (window_width / window_height) > 5 and drect[
+                        'width'] > 0.5 * window_width and (
+                            drect['y'] < windows_rect['height'] / 4 or drect['y'] > 3 * window_height / 4):
+                        if len(banners) == 0 or drect['outerHTML'] not in banners[-1]['outerHTML']:
+                            banners.append(drect)
+                    elif 0.5 < drect['width'] / drect['height'] < 2 and drect['width'] > 0.5 * window_width and \
+                            drect['height'] > 0.5 * window_height and (drect['y'] < window_height / 3):
+                        if count_words(drect['text']) > 10:
+                            if len(contents) == 0 or drect['outerHTML'] not in contents[-1]['outerHTML']:
+                                if len(contents) > 0 and drect['text'] in contents[-1]['text'] and count_words(
+                                        drect['text']) > 50 and count_words(contents[-1]['text']) > 50:
+                                    pass
+                                else:
+                                    contents.append(drect)
+                    else:
+                        pass
+                except NoSuchElementException:
+                    pass
+                except StaleElementReferenceException:
+                    pass
+                except Exception as e:
+                    print(d, flush=True)
+                    PrintException()
+
+            final_content = []
+
+            def get_banner_overlap_areas(c):
+                areas = 0
+                c_html = c['outerHTML']
+                for b in banners:
+                    b_html = b['outerHTML']
+                    if b_html in c_html:
+                        areas += int(b['width']) * int(b['height'])
+                return areas
+
+            if len(contents) > 0:
+                areas = [get_banner_overlap_areas(c) for c in contents]
+                min_area = np.array(areas).min()
+                final_content = [contents[cidx] for cidx in range(len(contents)) if areas[cidx] == min_area]
+            if len(final_content) > 0:
+                content_html = '<html>' + head_html + '<body>' + ''.join(
+                    [c['outerHTML'] for c in final_content]) + '</body></html>'
+                html = content_html
+            else:
+                content_html = '<html>' + head_html + body_html + '</html>'
+                html = content_html
+        except Exception as e:
+            PrintException()
+            print(e)
             html = driver.page_source
-        driver.close()
+        driver.quit()
+
+        def no_div_children(tag):
+            return (tag.name == 'table') or (tag.name == 'p' and tag.text and len(tag.text.strip()) > 0) or (
+                    tag.name == 'div' and tag.text and len(tag.text.strip()) > 0 and len(
+                tag.find_all('p')) == 0 and not [d for d in tag.find_all('div') if
+                                                 len(d.text.strip()) > 20])
 
         if html:
-            # tables = htmltable2markdown(html)
+            try:
+                # tables = htmltable2markdown(html)
+                for banner in banners:
+                    html = html.replace(banner['outerHTML'], '')
+                soup = BeautifulSoup(html, 'html.parser')
+                if soup.find('title'):
+                    title = soup.find('title').text.strip()
 
-            soup = BeautifulSoup(html, 'html.parser')
-            if soup.find('title'):
-                title = soup.find('title').text.strip()
+                [data.decompose() for data in
+                 soup(['style', 'script', 'nav', 'button', 'input', 'select', 'option', 'dd', 'dt', 'dl', 'abbr'])]
+                for tag in soup.find_all('div'):
+                    div_children = tag.find_all('div')
+                    div_children = [count_words(d.text.strip()) for d in div_children if
+                                    d.text and len(d.text.strip()) > 0]
+                    if len(div_children) > 0:
+                        mean_len = np.array(div_children).mean()
+                        if len(div_children) > 5 and mean_len < 10:
+                            tag.decompose()
+                for banner in banners:
+                    b = BeautifulSoup(banner['outerHTML'], 'html.parser').contents[0]
+                    if b.get('id'):
+                        b_area = soup.find(id=b.get('id'))
+                        if b_area is not None:
+                            b_area.decompose()
+                    elif b.get('class'):
+                        if len(soup.find_all(class_=b.get('class'))) == 1:
+                            b_area = soup.find(class_=b.get('class'))
+                            if b_area is not None:
+                                b_area.decompose()
+                # ps = soup.findAll('p')
+                # for _idx in range(len(ps)):
+                #     p = ps[_idx]
+                #     _div = Tag(soup, name='div')  # create a P element
+                #     p.replaceWith(_div)  # Put it where the A element is
+                #     _div.insert(0, p.text.strip())
+                total_words = count_words(soup.text.strip())
 
-            [data.decompose() for data in
-             soup(['style', 'script', 'nav', 'button', 'input', 'select', 'option', 'dd', 'dt', 'dl', 'abbr'])]
-            tables = htmltable2markdown(soup.prettify(formatter=None))
-            _tables = soup.find_all("table")
-            for idx in range(len(_tables)):
-                t = _tables[idx]
-                tag = Tag(soup, name="div")
-                text = NavigableString("@placeholder-table-{0}".format(idx))
-                tag.insert(0, text)
-                t.replaceWith(tag)
+                def tag2markdown(tag, idx):
+                    if tag.name == 'table':
+                        _parts_text = htmltable2markdown(tag.prettify(formatter=None))[0]
+                        text_frags.append(
+                            build_text_fragment(source=url, page_num=idx, paragraph_num=0, text=_parts_text))
+                    else:
+                        h = HTML2Text(baseurl=url)
+                        _parts_text = h.handle(
+                            '<html>' + head_html + '<body>' + tag.prettify(formatter=None) + '</body></html>')
+                        text_frags.append(
+                            build_text_fragment(source=url, page_num=idx, paragraph_num=0, text=_parts_text))
+                    return _parts_text
 
-            h = HTML2Text(baseurl=url)
-            resulttext = h.handle(soup.prettify(formatter=None))
+                def process_long_item(p):
+                    paras = []
+                    for s in p.text.strip().split('\n'):
+                        if len(s) == 0:
+                            pass
+                        elif count_words(s) <= 300:
+                            paras.append(s)
+                        elif count_words(s) > 300:
+                            paras.extend(seg_as_sentence(s))
 
-            for idx in range(len(tables)):
-                t = tables[idx]
-                resulttext = resulttext.replace("@placeholder-table-{0}".format(idx), t)
+                    # 選單
+                    if count_words(p.text.strip()) / len(paras) < 10:
+                        return []
+                    elif np.array([1.0 if p.strip().startswith('^') else 0.0 for _p in paras if
+                                   len(_p.strip()) > 1]).mean() > 0.9:
+                        return []  # 參考文獻、引用
+                    group_results = optimal_grouping([count_words(_p.strip()) for _p in paras], min_sum=200,
+                                                     max_sum=300)
+                    results = []
+                    # slot_group = copy.deepcopy(group_results)
+                    current_idx = 0
 
-            # content = '\n'.join(['\n'.join(list(div.stripped_strings)) for div in divs])
-            return resulttext, title, 200
+                    # 把字數分組當作插槽插入tag
+                    slot_group = copy.deepcopy(group_results)
+                    for n in range(len(group_results)):
+                        this_group = group_results[n]
+                        if len(this_group) > 1:
+                            for g in range(len(this_group)):
+                                slot_group[n][g] = paras[current_idx]
+                                current_idx += 1
+                        elif len(this_group) == 1:
+                            slot_group[n][0] = paras[current_idx]
+                            current_idx += 1
+
+                    for idx in range(len(slot_group)):
+                        g = slot_group[idx]
+                        if len(g) > 0:
+                            this_text = ''.join(g) if len(g) > 1 else g[0]
+                            if len(this_text) > 0:
+                                tag = Tag(soup, name="div")
+                                text = NavigableString(this_text)
+                                tag.insert(0, text)
+                                results.append(tag)
+                    return results
+
+                parts = [soup.contents[0]] if total_words < 300 else soup.find_all(no_div_children)
+                new_parts = []
+                for p in parts:
+                    if count_words(p.text.strip()) > 300:
+                        new_parts.extend(process_long_item(p))
+                    else:
+                        new_parts.append(p)
+                parts = new_parts
+                group_results = optimal_grouping([count_words(p.text.strip()) for p in parts], min_sum=200,
+                                                 max_sum=300)
+                grouped_parts = []
+                # slot_group = copy.deepcopy(group_results)
+                current_idx = 0
+
+                # 把字數分組當作插槽插入tag
+                slot_group = copy.deepcopy(group_results)
+                for n in range(len(group_results)):
+                    this_group = group_results[n]
+                    if len(this_group) > 1:
+                        for g in range(len(this_group)):
+                            slot_group[n][g] = parts[current_idx]
+                            current_idx += 1
+                    elif len(this_group) == 1:
+                        slot_group[n][0] = parts[current_idx]
+                        current_idx += 1
+
+                # 逐一檢查插槽，將插槽內tag合併
+                for n in range(len(slot_group)):
+                    this_group = slot_group[n]
+                    this_text = '\n'.join([t.text.strip() for t in this_group]) if len(this_group) > 1 else this_group[
+                        0].text.strip() if len(this_group) == 1 else ''
+                    if len(this_group) > 1:
+                        tag = Tag(soup, name="div")
+                        tag.insert(0, this_text)
+                        grouped_parts.append(tag)
+
+                    elif len(this_group) == 1:
+                        grouped_parts.append(slot_group[n][0])
+                parts_text = [tag2markdown(p, i) for i, p in enumerate(grouped_parts)]
+
+                cxt.memory.bulk_update(url, text_frags)
+                tables = htmltable2markdown(soup.prettify(formatter=None))
+                _tables = soup.find_all("table")
+                for idx in range(len(_tables)):
+                    t = _tables[idx]
+                    tag = Tag(soup, name="div")
+
+                    text = NavigableString("@placeholder-table-{0}".format(idx))
+                    tag.insert(0, text)
+                    t.replaceWith(tag)
+
+                h = HTML2Text(baseurl=url)
+                resulttext = h.handle(soup.prettify(formatter=None))
+
+                for idx in range(len(tables)):
+                    t = tables[idx]
+                    resulttext = resulttext.replace("@placeholder-table-{0}".format(idx), t)
+
+                # content = '\n'.join(['\n'.join(list(div.stripped_strings)) for div in divs])
+                text_len = len(resulttext)
+                return resulttext, title, 200
+            except:
+                PrintException()
         else:
             return None, '', 200
     return None, '', 400

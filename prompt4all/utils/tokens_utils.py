@@ -4,14 +4,18 @@ __all__ = [
     "estimate_used_tokens", "num_tokens_from_history"]
 
 
-def estimate_used_tokens(string: str, model_name: str = 'gpt-3.5-turbo') -> int:
+def estimate_used_tokens(input_string: str, model_name: str = 'gpt-3.5-turbo') -> int:
     """Returns the number of tokens in a text string."""
     try:
-        encoding = tiktoken.encoding_for_model(model_name)
-    except:
-        encoding = tiktoken.get_encoding("cl100k_base")
-    num_tokens = len(encoding.encode(string))
-    return num_tokens
+        try:
+            encoding = tiktoken.encoding_for_model(model_name)
+        except:
+            encoding = tiktoken.get_encoding("cl100k_base")
+        num_tokens = len(encoding.encode(input_string))
+        return num_tokens
+    except Exception as e:
+        print(e, flush=True)
+        return 0
 
 
 def num_tokens_from_history(full_history, model="gpt-3.5-turbo-0301"):

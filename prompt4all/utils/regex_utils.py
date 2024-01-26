@@ -3,7 +3,8 @@ import regex
 __all__ = [
     "choice_pattern", "delta_pattern", "json_pattern", 'numbered_list_member_pattern', 'unordered_listitem_pattern',
     "replace_special_chars", 'extract_score', 'extract_code', 'triplequote_pattern', 'is_numbered_list_member',
-    'is_unordered_list_member', 'extract_numbered_list_member', 'find_all_placeholders', 'md_table_pattern']
+    'is_unordered_list_member', 'extract_numbered_list_member', 'find_all_placeholders', 'md_table_pattern',
+    'count_words']
 
 choice_pattern = regex.compile(r'"choices":\s*\[(\{.*?\})\]')
 
@@ -19,6 +20,38 @@ numbered_list_member_pattern = regex.compile(r'\s*(\d+(\.\d+)*\.?)(?=\s)')
 code_pattern = regex.compile(r'```(.*?)```')
 
 md_table_pattern = regex.compile(r"^(\|.*\|)\r?\n\|([ :-]+)\|\r?\n(\|(.*\|)+)", regex.MULTILINE)
+
+
+def count_words(text):
+    """
+
+    Args:
+        text:
+
+    Returns:
+
+    Examples:
+        >>> count_words("今天 天氣\\n真好 The Weather is good ?")
+        41
+
+    """
+    if text is None:
+        return 0
+    # 移除空白字符（空格、換行符、Tab等）
+    cleaned_text = regex.sub(r'\s+', '', text)
+
+    # 分別匹配亞洲文字、非亞洲文字
+    asian_characters = regex.findall(r'[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]', text)
+    non_asian_words = regex.findall(r'[a-zA-Z0-9]+', text)
+    other_characters = regex.findall(r'[^\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af\w]', cleaned_text)
+
+    # 計算亞洲文字、非亞洲文字及其他字符數量
+    asian_word_count = len(asian_characters)
+    non_asian_word_count = len(non_asian_words)
+    other_characters_count = len(other_characters)
+
+    # 返回總字數
+    return asian_word_count + non_asian_word_count
 
 
 def find_all_placeholders(text):
