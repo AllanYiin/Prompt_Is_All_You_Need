@@ -95,11 +95,11 @@ Final milestone : milestone, m2, 18:08, 4m
 * `sectionLabels` — 部分的標籤。
 ```
 
-## Setting dates[​](https://mermaid.js.org/syntax/gantt.html#setting-dates)
+## Setting dates[](https://mermaid.js.org/syntax/gantt.html#setting-dates)
 
 `dateFormat` defines the format of the date **input** of your gantt elements. How these dates are represented in the rendered chart **output** are defined by `axisFormat`.
 
-### Input date format[​](https://mermaid.js.org/syntax/gantt.html#input-date-format)
+### Input date format[](https://mermaid.js.org/syntax/gantt.html#input-date-format)
 
 The default input date format is `YYYY-MM-DD`. You can define your custom `dateFormat`.
 
@@ -111,20 +111,20 @@ dateFormat YYYY-MM-DD
 
 The following formatting options are supported:
 
-| Input          | Example        | Description                                            |
-| ---------------- | ---------------- | -------------------------------------------------------- |
+| Input      | Example        | Description                                            |
+| ---------- | -------------- | ------------------------------------------------------ |
 | `YYYY`     | 2014           | 4 digit year                                           |
 | `YY`       | 14             | 2 digit year                                           |
 | `Q`        | 1..4           | Quarter of year. Sets month to first month in quarter. |
 | `M MM`     | 1..12          | Month number                                           |
-| `MMM MMMM` | January..Dec   | Month name in locale set by `dayjs.locale()`       |
+| `MMM MMMM` | January..Dec   | Month name in locale set by`dayjs.locale()`            |
 | `D DD`     | 1..31          | Day of month                                           |
 | `Do`       | 1st..31st      | Day of month with ordinal                              |
 | `DDD DDDD` | 1..365         | Day of year                                            |
 | `X`        | 1410715640.579 | Unix timestamp                                         |
 | `x`        | 1410715640579  | Unix ms timestamp                                      |
 | `H HH`     | 0..23          | 24 hour time                                           |
-| `h hh`     | 1..12          | 12 hour time used with `a A`.                      |
+| `h hh`     | 1..12          | 12 hour time used with`a A`.                           |
 | `a A`      | am pm          | Post or ante meridiem                                  |
 | `m mm`     | 0..59          | Minutes                                                |
 | `s ss`     | 0..59          | Seconds                                                |
@@ -135,7 +135,7 @@ The following formatting options are supported:
 
 More info in: [https://day.js.org/docs/en/parse/string-format/](https://day.js.org/docs/en/parse/string-format/)
 
-### Output date format on the axis[​](https://mermaid.js.org/syntax/gantt.html#output-date-format-on-the-axis)
+### Output date format on the axis[](https://mermaid.js.org/syntax/gantt.html#output-date-format-on-the-axis)
 
 The default output date format is `YYYY-MM-DD`. You can define your custom `axisFormat`, like `2020-Q1` for the first quarter of the year 2020.
 
@@ -148,7 +148,7 @@ axisFormat %Y-%m-%d
 The following formatting strings are supported:
 
 | Format | Definition                                                                                |
-| -------- | ------------------------------------------------------------------------------------------- |
+| ------ | ----------------------------------------------------------------------------------------- |
 | %a     | abbreviated weekday name                                                                  |
 | %A     | full weekday name                                                                         |
 | %b     | abbreviated month name                                                                    |
@@ -176,7 +176,7 @@ The following formatting strings are supported:
 
 More info in: [https://github.com/d3/d3-time-format/tree/v4.0.0#locale\_format](https://github.com/d3/d3-time-format/tree/v4.0.0#locale_format)
 
-### Axis ticks (v10.3.0+)[​](https://mermaid.js.org/syntax/gantt.html#axis-ticks-v10-3-0)
+### Axis ticks (v10.3.0+)[](https://mermaid.js.org/syntax/gantt.html#axis-ticks-v10-3-0)
 
 The default output ticks are auto. You can custom your `tickInterval`, like `1day` or `1week`.
 
