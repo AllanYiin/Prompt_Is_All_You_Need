@@ -91,21 +91,21 @@ def adjust_theme():
             button_cancel_text_color_dark="white",
         )
 
-        if ADD_WAIFU:
-            js = """
-                <script src="file=docs/waifu_plugin/jquery.min.js"></script>
-                <script src="file=docs/waifu_plugin/jquery-ui.min.js"></script>
-                <script src="file=docs/waifu_plugin/autoload.js"></script>
-            """
-            gradio_original_template_fn = gr.routes.templates.TemplateResponse
-
-            def gradio_new_template_fn(*args, **kwargs):
-                res = gradio_original_template_fn(*args, **kwargs)
-                res.body = res.body.replace(b'</html>', f'{js}</html>'.encode("utf8"))
-                res.init_headers()
-                return res
-
-            gr.routes.templates.TemplateResponse = gradio_new_template_fn  # override gradio template
+        # if ADD_WAIFU:
+        #     js = """
+        #         <script src="file=docs/waifu_plugin/jquery.min.js"></script>
+        #         <script src="file=docs/waifu_plugin/jquery-ui.min.js"></script>
+        #         <script src="file=docs/waifu_plugin/autoload.js"></script>
+        #     """
+        #     gradio_original_template_fn = gr.routes.templates.TemplateResponse
+        #
+        #     def gradio_new_template_fn(*args, **kwargs):
+        #         res = gradio_original_template_fn(*args, **kwargs)
+        #         res.body = res.body.replace(b'</html>', f'{js}</html>'.encode("utf8"))
+        #         res.init_headers()
+        #         return res
+        #
+        #     gr.routes.templates.TemplateResponse = gradio_new_template_fn  # override gradio template
     except:
         set_theme = None
         print('gradio版本较旧, 不能自定义字体和颜色')
@@ -113,6 +113,28 @@ def adjust_theme():
 
 
 advanced_css = """
+.loader {
+  border: 16px solid #f3f3f3;
+  border-radius: 50%;
+  border-top: 16px solid #3498db;
+  width: 48px;
+  height: 48px;
+  -webkit-animation: spin 2s linear infinite; /* Safari */
+  animation: spin 2s linear infinite;
+}
+
+/* Safari */
+@-webkit-keyframes spin {
+  0% { -webkit-transform: rotate(0deg); }
+  100% { -webkit-transform: rotate(360deg); }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+
 #nlu_row .json {
     overflow: scroll;
     display: block;
@@ -152,23 +174,50 @@ advanced_css = """
 }
 
 .screen_container {
-    max-height: 100%;
+    max-height: 90%;
 }
 
 .scroll-hide::-webkit-scrollbar {
 width: 1em;
 }
 
-.assistants_files {
-    flex-direction: column;
-    flex-grow: 1;
-    overflow-y: scroll;
+
+.message_img {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 5px;
+  min-width: 200px;
+  min-height: 150px;
 }
+
+.message_img:hover {
+  box-shadow: 0 0 2px 1px rgba(0, 140, 186, 0.5);
+}
+
+div.scroll_image_gallery {
+  background-color: #333;
+  white-space: nowrap;
+  padding: 2px;
+  overflow-x: scroll;
+  overflow-y: hidden;
+  max-height: 200px;
+}
+
+div.scroll_image_gallery a {
+  padding: 2px;
+}
+
+
+
 
 #rolling_file {height: 75px;}
 #component-0 { height: 100%; }
 #chatbot { 
 flex-grow: 1; 
+}
+
+.chatbot {
+    flex-grow: 1; 
 }
 
 /* 设置表格的外边距为1em，内部单元格之间边框合并，空单元格显示. */
