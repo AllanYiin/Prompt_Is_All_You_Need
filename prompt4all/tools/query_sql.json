@@ -2,7 +2,7 @@
   "type": "function",
   "function": {
     "name": "query_sql",
-    "description": "Translate the user’s query to the database or the request to get some aggregate data into T-SQL, then execute it and return the result.",
+    "description": "Translate the user’s intent query to the business sales database or the request to get some aggregate data about sales  into T-SQL, then execute it and return the result.",
     "parameters": {
       "type": "object",
       "properties": {

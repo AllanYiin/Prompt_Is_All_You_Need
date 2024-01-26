@@ -144,6 +144,8 @@ def generate_diagram(di, dt, ss=None):
 
 
 def exec_mermaid_cli(mermaid_markdown, diagram_type):
+    if 'graph TB' in mermaid_markdown:
+        mermaid_markdown = mermaid_markdown.replace('graph LR')
     temfolder = tempfile.gettempdir()
     input_path = os.path.join(temfolder, str(uuid.uuid4().node) + '.mmd')
     with open(input_path, "w") as t:
@@ -174,6 +176,10 @@ def get_diagram_guidelines(dt):
         return open("prompts/pie.md", encoding="utf-8").read()
     elif dt == 'gantt':
         return open("prompts/gantt.md", encoding="utf-8").read()
+    elif dt == 'quadrantChart':
+        return open("prompts/quadrantChart.md", encoding="utf-8").read()
+    elif dt == 'stateDiagram':
+        return open("prompts/stateDiagram.md", encoding="utf-8").read()
 
 
 def get_diagram(dt, mc, ra=1):
