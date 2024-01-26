@@ -371,7 +371,7 @@ class GptBaseApi:
                                 if self.temp_state[-i]['role'] == 'assistant':
                                     self.temp_state[-i]['content'] = partial_words
                                     break
-                                yield full_history
+                            yield full_history
 
                         if this_delta.tool_calls:
                             self.temp_state = [s for s in self.temp_state if s['role'] != 'status']
