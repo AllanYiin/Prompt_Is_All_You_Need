@@ -2,7 +2,10 @@ import inspect
 import json
 import locale
 import os
+import regex
 import platform
+import datetime
+import time
 import sys
 import threading
 import traceback
@@ -13,7 +16,89 @@ import numpy as np
 
 _prompt4all_context = None
 
-__all__ = ["sanitize_path", "split_path", "make_dir_if_need", "_context", "get_sitepackages", "PrintException"]
+__all__ = ["sanitize_path", "split_path", "make_dir_if_need", "_context", "get_sitepackages", "PrintException",
+           "model_info"]
+
+model_info = {
+    # openai
+    "gpt-3.5-turbo": {
+        "endpoint": 'https://api.openai.com/v1/chat/completions',
+        "max_token": 4096
+    },
+    "gpt-4-1106-preview": {
+        "endpoint": 'https://api.openai.com/v1/chat/completions',
+        "max_token": 128000
+    },
+    "gpt-4-vision-preview": {
+        "endpoint": 'https://api.openai.com/v1/chat/completions',
+        "max_token": 128000
+    },
+    "gpt-4": {
+        "endpoint": 'https://api.openai.com/v1/chat/completions',
+        "max_token": 8192
+    },
+
+    "gpt-3.5-turbo-0613": {
+        "endpoint": 'https://api.openai.com/v1/chat/completions',
+        "max_token": 4096
+    },
+    "gpt-3.5-turbo-16k-0613": {
+        "endpoint": 'https://api.openai.com/v1/chat/completions',
+        "max_token": 16385
+    },
+    "gpt-3.5-turbo-1106": {
+        "endpoint": 'https://api.openai.com/v1/chat/completions',
+        "max_token": 16385
+    },
+
+    "gpt-4-0613": {
+        "endpoint": 'https://api.openai.com/v1/chat/completions',
+        "max_token": 8192
+    },
+    "gpt-4-0314": {
+        "endpoint": 'https://api.openai.com/v1/chat/completions',
+        "max_token": 8192
+    },
+
+    "gpt-4-32k": {
+        "endpoint": 'https://api.openai.com/v1/chat/completions',
+        "max_token": 32768
+    },
+
+    "gpt-4-32k-0314": {
+        "endpoint": 'https://api.openai.com/v1/chat/completions',
+        "max_token": 32768
+    },
+    "azure gpt-3.5-turbo": {
+        "endpoint": 'https://prd-gpt-scus.openai.azure.com',
+        "max_token": 4096
+    },
+    "azure 2023-03-15-preview": {
+        "api_version": "2023-03-15-preview",
+        "endpoint": 'https://ltc-to-openai.openai.azure.com/',
+        "max_token": 4096
+    },
+
+    "azure gpt-4": {
+        "endpoint": 'https://prd-gpt-scus.openai.azure.com',
+        "max_token": 8192
+    },
+
+    "azure gpt-4-0314": {
+        "endpoint": 'https://prd-gpt-scus.openai.azure.com',
+        "max_token": 8192
+    },
+
+    "azure gpt-4-32k": {
+        "endpoint": 'https://prd-gpt-scus.openai.azure.com',
+        "max_token": 32768
+    },
+
+    "azure gpt-4-32k-0314": {
+        "endpoint": 'https://prd-gpt-scus.openai.azure.com',
+        "max_token": 32768
+    }
+}
 
 
 def sanitize_path(path):
@@ -156,6 +241,45 @@ def get_sitepackages():  # pragma: no cover
             return []
 
 
+def get_time_suffix():
+    """
+
+    Returns:
+        timestamp string , usually use when save a file.
+
+    """
+    prefix = str(datetime.datetime.fromtimestamp(time.time())).replace(' ', '').replace(':', '').replace('-',
+                                                                                                         '').replace(
+        '.', '')
+    return prefix
+
+
+class Logger:
+    def __init__(self, filename):
+        self.terminal = sys.stdout
+        self.regex = regex.compile(r"^(?!INFO:).*", regex.MULTILINE)
+        self.log = open(filename, "a")
+
+    def __getattr__(self, name):
+        if name in ('terminal', 'regex', 'log'):
+            return self.__dict__[name]
+        else:
+            return getattr(self.terminal, name)
+
+    def write(self, message):
+        self.terminal.write(message)
+
+        filted_message = "\n".join(self.regex.findall(message))
+        self.log.write(filted_message)
+
+    def flush(self):
+        self.terminal.flush()
+        self.log.flush()
+
+    def isatty(self):
+        return False
+
+
 class _ThreadLocalInfo(threading.local):
     """
     Thread local Info used for store thread local attributes.
@@ -197,7 +321,7 @@ class _Context:
         self._module_dict = dict()
         self.conversation_history = None
         self.print = partial(print, flush=True)
-
+        self.log_path = None
         self.prompt4all_dir = self.get_prompt4all_dir()
         self.service_type = None
         self.deployments = []
@@ -209,6 +333,7 @@ class _Context:
         self.assistant_state = None
         self.status_word = ''
         self.counter = 0
+        self.memory = None
         self.sql_engine = None
         self.conn_string = None
         self.databse_schema = None
@@ -234,7 +359,7 @@ class _Context:
                                 suppress=True)
             self.is_db_enable = False
         self.conn_string = 'mssql+pyodbc://@' + 'localhost' + '/' + 'AdventureWorksDW2022' + '?trusted_connection=yes&driver=ODBC+Driver+17+for+SQL+Server'
-        self.databse_schema = open("examples/query_database/schema.txt", encoding="utf-8").read()
+        self.databse_schema = None
 
         if 'PROMPT4ALL_WORKING_DIR' in os.environ:
             self.working_directory = os.environ['PROMPT4ALL_WORKING_DIR']
@@ -346,6 +471,8 @@ class _Context:
                 session.pop('assistant_state')
                 session.pop('placeholder_lookup')
                 session.pop('citations')
+                session.pop('memory')
+
                 session['assistants'] = [a.json() if is_instance(a, "Assistant") else a for a in self.assistants]
                 session['baseChatGpt'] = self.baseChatGpt if isinstance(self.baseChatGpt,
                                                                         str) else self.baseChatGpt.api_model if self.baseChatGpt else None
@@ -417,3 +544,9 @@ def _context():
     if _prompt4all_context is None:
         _prompt4all_context = _Context()
     return _prompt4all_context
+
+
+make_dir_if_need(os.path.join(_context().get_prompt4all_dir(), "logs"))
+log_path = os.path.join(_context().get_prompt4all_dir(), "logs", "{0}.log".format(get_time_suffix()[:8]))
+_context().log_path = log_path
+sys.stdout = Logger(log_path)

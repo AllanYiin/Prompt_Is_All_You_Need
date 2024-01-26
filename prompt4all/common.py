@@ -6,7 +6,8 @@ import importlib
 import inspect
 
 __all__ = ["find_available_port", "unpack_singleton", "red_color", "green_color", "blue_color", "cyan_color",
-           "yellow_color", "orange_color", "gray_color", "violet_color", "magenta_color", "get_tool"]
+           "yellow_color", "orange_color", "gray_color", "violet_color", "magenta_color", "get_tool",
+           "optimal_grouping"]
 
 
 def find_available_port(priority: Union[int, List[int]] = None) -> int:
@@ -50,6 +51,55 @@ def unpack_singleton(x):
     elif isinstance(x, (tuple, list)) and len(x) == 1:
         return x[0]
     return x
+
+
+def optimal_grouping(arr, min_sum=200, max_sum=300):
+    """
+
+    Args:
+        arr:
+        min_sum:
+        max_sum:
+
+    Returns:
+
+    >>> optimal_grouping( [126, 169, 264, 235, 112, 169, 156, 123, 500, 267, 184, 239, 141, 73, 130])
+    [[126, 169], [264], [235], [112, 169], [156, 123], [500], [267], [184], [239], [141, 73, 130]]
+    """
+    groups = []
+    current_group = []
+    current_sum = 0
+
+    for num in arr:
+        if current_sum + num > max_sum:
+            # Current group is finalized
+            groups.append(current_group)
+            current_group = [num]
+            current_sum = num
+        else:
+            # Add number to current group
+            current_group.append(num)
+            current_sum += num
+
+            # Check if we are at the end and need to adjust
+            if len(arr) - arr.index(num) <= 3 and current_sum < min_sum:
+                # Adjust the last few groups to balance
+                if groups:
+                    last_group_sum = sum(groups[-1])
+                    if last_group_sum + current_sum <= max_sum:
+                        groups[-1].extend(current_group)
+                        current_group = []
+                        current_sum = 0
+
+    # Add the last group if it's not empty
+    if current_group:
+        if groups and sum(current_group) < min_sum:
+            # Merge with the previous group if the sum is too small
+            groups[-1].extend(current_group)
+        else:
+            groups.append(current_group)
+
+    return groups
 
 
 def red_color(text, bolder=False):
