@@ -5,6 +5,7 @@ from prompt4all.utils.whisper_utils import *
 from prompt4all.common import *
 from prompt4all.utils.summary_utils import *
 from prompt4all.utils.pdf_utils import *
+from prompt4all.utils.tokens_utils import estimate_used_tokens
 import copy
 import glob
 

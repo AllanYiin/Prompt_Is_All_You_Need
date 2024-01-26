@@ -181,14 +181,15 @@ def assistant_panel():
                                 with gr.Row(variant='compact'):
                                     b4 = gr.Button(value="💬", interactive=True, size='sm', scale=1, min_width=6, )
                                     b3 = gr.Button(value="🗑️", interactive=True, size='sm', scale=1, min_width=64)
-                    chatbot = gr.Chatbot(value=message2chat,
-                                         elem_classes='chatbot', container=True, scale=4,
-                                         render_markdown=True, min_width=550,
-                                         avatar_images=["./images/avatar/human.png",
-                                                        "./images/assistants/assistant01.png"],
-                                         likeable=True,
-                                         show_copy_button=True, bubble_full_width=True, show_share_button=True, every=1,
-                                         layout="panel")
+                        chatbot = gr.Chatbot(value=message2chat,
+                                             elem_classes='chatbot', container=True, scale=4,
+                                             render_markdown=True, min_width=550,
+                                             avatar_images=["./images/avatar/human.png",
+                                                            "./images/assistants/assistant01.png"],
+                                             likeable=True,
+                                             show_copy_button=True, bubble_full_width=True, show_share_button=True,
+                                             every=1,
+                                             layout="panel")
 
                 with gr.Accordion("超參數", open=False):
                     top_p = gr.Slider(minimum=-0, maximum=1.0, value=1, step=0.05, interactive=True,

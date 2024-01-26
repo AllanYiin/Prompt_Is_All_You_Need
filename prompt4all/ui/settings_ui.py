@@ -1,3 +1,5 @@
+import os
+
 import gradio as gr
 from prompt4all import context
 from prompt4all.context import *
@@ -87,4 +89,46 @@ def database_query_panel():
 
     schema_file.change(process_file, [schema_file, db_state], [text_db_schema, db_state])
     _panel = gr.Group(cb_db_enable, conn_setting, text_conn, schema_file, text_db_schema, elem_id="db_setting_panel")
+    return _panel
+
+
+def service_type_panel():
+    _service_radio = gr.Radio(choices=["openai", "azure"], value=None, label="服務提供者", interactive=True)
+    _secret = gr.Textbox(label="API金鑰", value="", type="text", interactive=False)
+    _deployments = gr.DataFrame(headers=["deployment_endpoint", "model_name"], wrap=True, col_count=(2, 'fixed'),
+                                row_count=(1, 'dynamic'), interactive=True, type="array", datatype=['str', 'str'])
+    _panel = gr.Group(_service_radio, _secret, _deployments, elem_id="service_type_panel")
+
+    def service_type_change(_service_type):
+        cxt.service_type = _service_type
+        api_type = "OPENAI_API_KEY"
+        if _service_type == "openai":
+            secret_kety = os.getenv("OPENAI_API_KEY")
+        else:
+            secret_kety = os.getenv("AZURE_OPENAI_API_KEY")
+            api_type = "AZURE_OPENAI_API_KEY"
+
+        if secret_kety:
+            return gr.Textbox(label="API金鑰(環境變數{0})".format(api_type),
+                              value=secret_kety[:3] + ''.join(['*'] * len(secret_kety[3:])), type="text",
+                              interactive=False)
+        else:
+            return gr.Textbox(label="API金鑰(環境變數{0})".format(api_type), value="未正確設定", type="text",
+                              interactive=False)
+
+    def deployments_change(_deployments):
+        if _deployments is not None:
+            cxt.deployments = _deployments
+
+    _service_radio.change(fn=service_type_change, inputs=[_service_radio], outputs=[_secret], queue=False)
+    _deployments.change(deployments_change, inputs=[_deployments], outputs=[])
+
+    _service_radio.value = cxt.service_type
+    _deployments.value['data'] = cxt.deployments
+
+    # if cxt.service_type == "azure":
+    #     _secret = service_type_change("azure")
+    # else:
+    #     _secret = service_type_change("openai")
+
     return _panel
