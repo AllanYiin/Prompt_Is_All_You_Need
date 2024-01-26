@@ -1,6 +1,7 @@
 # -*- coding: utf-8-sig -*-
 import json
 import os
+import sys
 import datetime
 import time
 import string
@@ -26,16 +27,18 @@ from openai.types import beta
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi import FastAPI
-from gradio.routes import safe_join
+import prompt4all.tools.chart_tools
 
 nest_asyncio.apply()
 from collections import OrderedDict
 from datetime import datetime
+from prompt4all import custom_js
 from prompt4all.utils.chatgpt_utils import *
 from prompt4all.utils.regex_utils import *
 import prompt4all.api.context_type as ContextType
 from prompt4all.api.base_api import *
 from prompt4all.api.message import *
+from prompt4all.api.memories import *
 from prompt4all.utils.tokens_utils import *
 from prompt4all.utils.summary_utils import *
 from prompt4all.utils.pdf_utils import *
@@ -49,12 +52,15 @@ from prompt4all.context import *
 from prompt4all.common import find_available_port
 from prompt4all.ui import settings_ui, rewrite_ui, image_ui, nlu_ui, assistant_ui, chatbot_ui, summarization_ui
 from openai import OpenAI, AsyncOpenAI, AzureOpenAI
+from prompt4all.api.memories import *
 import uvicorn
 
 # app = FastAPI()
 
 os.chdir(os.path.dirname(__file__))
 cxt = context._context()
+cxt.memory = InMemoryCache()
+
 os.environ['no_proxy'] = '*'
 
 # 設置您的OpenAI API金鑰
@@ -75,6 +81,9 @@ for a in cxt.assistants:
         new_assistants.append(_assistant)
 cxt.__setattr__('assistants', new_assistants)
 initialize_conversation_history()
+
+cxt.memory = InMemoryCache()
+cxt.memory.load()
 
 
 def index2context(idx: int):
@@ -98,10 +107,13 @@ def message2chat():
     _state = cxt.state.value
     chat = []
     # chat.append((None,
-    #              '![流程圖](./generate_images/1701555707-日本櫻前線數據為主題的立體infographic-1.png  "流程圖")'))
-    # chat.append(
-    #     (None,
-    #      '<div style="height:350px"><img title="流程圖" alt="流程圖"  src="http://localhost:7860/generate_images/1701555707-日本櫻前線數據為主題的立體infographic-1.png"></div>'))
+    #              '<div class="scroll_image_gallery">' +
+    #              '<a href="https://media-01.creema.net/blog/parts/942-65af43a0e2e4f3fc3d298899355cdb9d.jpg"><img src="https://media-01.creema.net/blog/parts/942-65af43a0e2e4f3fc3d298899355cdb9d.jpg" alt="格紋的歷史介紹，常見的五種格紋搭配單品| Creema 手作・設計..."  class="message_img"><p>格紋的歷史介紹，常見的五種格紋搭配單品| Creema 手作・設計..</p></a>' +
+    #              '<a href="https://hbt001.ccis.chiefappc.com/cac/CmiProd/E2CO089_78_M_01_m.jpg"><img src="https://hbt001.ccis.chiefappc.com/cac/CmiProd/E2CO089_78_M_01_m.jpg" alt="菱格紋針織外套| CACO 最大美式授權服飾品牌..."  class="message_img"><p>菱格紋針織外套| CACO 最大美式授權服飾品牌..</p></a>' +
+    #              '<a href="https://s.yimg.com/zp/MerchandiseImages/9D19D69A1D-SP-9603754.jpg"><img src="https://s.yimg.com/zp/MerchandiseImages/9D19D69A1D-SP-9603754.jpg" alt="CHANEL 經典LOGO菱格紋小牛皮鏈帶肩背/斜背包"  class="message_img"><p>CHANEL 經典LOGO菱格紋小牛皮鏈帶肩背/斜背包</p></a>' +
+    #              '<a href="https://www.charleskeith.com/dw/image/v2/BCWJ_PRD/on/demandware.static/-/Sites-ck-products/default/dw541eb02e/images/hi-res/2022-L7-CK2-20681043-4-01-1.jpg?sw=1536&sh=2100"><img src="https://www.charleskeith.com/dw/image/v2/BCWJ_PRD/on/demandware.static/-/Sites-ck-products/default/dw541eb02e/images/hi-res/2022-L7-CK2-20681043-4-01-1.jpg?sw=1536&sh=2100" alt="菱格紋雙鍊肩背包 - 黑色..."  class="message_img"><p>菱格紋雙鍊肩背包 - 黑色..</p></a></div>'))
+    # chat.append((None, '![{0}]({1}  "{2}")'.format(
+    #     '由mermaid生成', './generate_images/chart_test.png', 'chat')))
     if _state:
         for i in range(len(_state)):
             current_message = process_chat(_state[i])
@@ -128,11 +140,19 @@ def message2chat():
     return None
 
 
+def read_logs():
+    sys.stdout.flush()
+    with open(cxt.log_path, "r") as f:
+        return f.read()
+
+
 def clear_history():
-    FULL_HISTORY = [{"role": "system", "content": cxt.baseChatGpt.SYSTEM_MESSAGE,
-                     "estimate_tokens": estimate_used_tokens(cxt.baseChatGpt.SYSTEM_MESSAGE,
-                                                             model_name=cxt.baseChatGpt.API_MODEL)}]
-    return [], FULL_HISTORY, FULL_HISTORY
+    cxt.state.value = [{"role": "system", "content": cxt.baseChatGpt.SYSTEM_MESSAGE,
+                        "estimate_tokens": estimate_used_tokens(cxt.baseChatGpt.SYSTEM_MESSAGE,
+                                                                model_name=cxt.baseChatGpt.API_MODEL)}]
+    cxt.baseChatGpt.temp_state = []
+    chat = message2chat()
+    return chat, cxt.state.value, cxt.state.value
 
 
 def reset_textbox():
@@ -159,14 +179,15 @@ if __name__ == '__main__':
     title = """<h1 align="center">🔥🤖Prompt is All You Need! 🚀</h1>"""
     if "OPENAI_API_KEY" not in os.environ:
         title = """<h1 align="center">🔥🤖Prompt is All You Need! 🚀</h1><br><h2 align="center"><span style='color:red'>你尚未設置api key</span></h2>"""
+
     description = ""
     cancel_handles = []
 
-    this_blocks = gr.Blocks(title="Prompt is what you need!", css=advanced_css, analytics_enabled=False,
+    this_blocks = gr.Blocks(title="Prompt is what you need!", css=advanced_css,
+                            analytics_enabled=False,
                             theme=adjust_theme())
 
     with this_blocks:
-
         cxt.baseChatGpt = GptBaseApi(cxt.baseChatGpt) if cxt.baseChatGpt else GptBaseApi(model="gpt-4-1106-preview")
         cxt.baseChatGpt.enable_database_query(cxt.is_db_enable)
         cxt.summaryChatGpt = GptBaseApi(cxt.summaryChatGpt) if cxt.summaryChatGpt else GptBaseApi(
@@ -236,8 +257,9 @@ if __name__ == '__main__':
                                 history_list = gr.templates.List(value=cxt.conversation_history.titles, height=550,
                                                                  headers=["歷史"], datatype=["str"],
                                                                  col_count=(1, 'fixed'), interactive=True)
-                    with gr.Column(scale=3):
-                        chatbot = gr.Chatbot(value=message2chat, elem_classes='chatbot', container=True, height=550,
+                    with gr.Column(scale=4):
+                        chatbot = gr.Chatbot(value=message2chat, label=f"當前模型：{cxt.baseChatGpt.api_model}",
+                                             elem_classes='chatbot', container=True, height="70%",
                                              render_markdown=True,
                                              avatar_images=["images/avatar/human.png", "images/avatar/assistant.png"],
                                              show_copy_button=True, bubble_full_width=True, show_share_button=True,
@@ -257,19 +279,42 @@ if __name__ == '__main__':
                 rewrite_ui.rewrite_panel()
             with gr.TabItem("長文本摘要"):
                 summarization_ui.summerization_panel()
+            with gr.TabItem("執行紀錄"):
+                with gr.Column(scale=1):
+                    log_viewer = gr.Textbox(container=True, lines=40, max_lines=50000)
             with gr.TabItem("設定"):
-                with gr.Column():
-                    settings_ui.service_type_panel()
-                    dropdown_api1 = gr.Dropdown(choices=[k for k in model_info.keys()], value="gpt-4-1106-preview",
-                                                label="對話使用之api", interactive=True)
-                    dropdown_api4 = gr.Dropdown(choices=[k for k in model_info.keys()], value="gpt-4-1106-preview",
-                                                label="以文生圖使用之api", interactive=True)
-                    dropdown_api2 = gr.Dropdown(choices=[k for k in model_info.keys()], value="gpt-3.5-turbo-16k-0613",
-                                                label="長文本摘要使用之api", interactive=True)
-                    dropdown_api3 = gr.Dropdown(choices=[k for k in model_info.keys()], value="gpt-4-1106-preview",
-                                                label="其他功能使用之api", interactive=True)
-                    gr.Group(dropdown_api1, dropdown_api4, dropdown_api2, dropdown_api3)
-                    settings_ui.database_query_panel()
+                with gr.Tabs():
+                    with gr.TabItem("對話"):
+                        with gr.Column():
+                            settings_ui.service_type_panel()
+                            dropdown_api1 = gr.Dropdown(choices=[k for k in model_info.keys()],
+                                                        value="gpt-4-1106-preview",
+                                                        label="對話使用之api", interactive=True)
+                            dropdown_api4 = gr.Dropdown(choices=[k for k in model_info.keys()],
+                                                        value="gpt-4-1106-preview",
+                                                        label="以文生圖使用之api", interactive=True)
+                            dropdown_api2 = gr.Dropdown(choices=[k for k in model_info.keys()],
+                                                        value="gpt-3.5-turbo-16k-0613",
+                                                        label="長文本摘要使用之api", interactive=True)
+                            dropdown_api3 = gr.Dropdown(choices=[k for k in model_info.keys()],
+                                                        value="gpt-4-1106-preview",
+                                                        label="其他功能使用之api", interactive=True)
+                            gr.Group(dropdown_api1, dropdown_api4, dropdown_api2, dropdown_api3)
+                            settings_ui.database_query_panel()
+
+
+        def add_user_prompt(inputs, full_history):
+            if cxt.state.value and len(cxt.state.value) > 0:
+                last_message = cxt.state.value[-1]
+                if last_message["role"] == 'user' and last_message["content"] == inputs:
+                    chat = message2chat()
+                    return '', chat, full_history
+            cxt.state.value.append({"role": "user", "content": inputs})
+            chat = message2chat()
+            return inputs, chat, full_history
+
+
+        log_viewer.change(scroll_to_output=True, queue=False)
 
 
         def prompt_api(inputs, context_type, top_p, temperature, top_k, frequency_penalty, full_history):
@@ -320,7 +365,7 @@ if __name__ == '__main__':
                     #                 _last_tuple[0],
                     #                 _last_tuple[1] + "\n" + status_word.value if _last_tuple[
                     #                                                                  1] is not None else status_word.value)
-                    yield chat, full_history
+                    yield chat, full_history, full_history
                 except StopIteration:
                     break
                 except Exception as e:
@@ -329,14 +374,23 @@ if __name__ == '__main__':
 
         inputs_event = inputs.submit(prompt_api,
                                      [inputs, context_type, top_p, temperature, top_k, frequency_penalty, state],
-                                     [chatbot, state])
+                                     [chatbot, state, history_viewer])
         cancel_handles.append(inputs_event)
         inputs_event.then(reset_context, [], [context_type]).then(reset_textbox, [], [inputs])
-        b1_event = b1.click(prompt_api, [inputs, context_type, top_p, temperature, top_k, frequency_penalty, state],
-                            [chatbot, state])
+        b1_event = b1.click(add_user_prompt, inputs=[inputs, state], outputs=[inputs, chatbot, state]).then(prompt_api,
+                                                                                                            [inputs,
+                                                                                                             context_type,
+                                                                                                             top_p,
+                                                                                                             temperature,
+                                                                                                             top_k,
+                                                                                                             frequency_penalty,
+                                                                                                             state],
+                                                                                                            [chatbot,
+                                                                                                             state,
+                                                                                                             history_viewer])
         cancel_handles.append(b1_event)
         b1_event.then(reset_context, [], [context_type]).then(reset_textbox, [], [inputs])
-        b3.click(clear_history, [], [state, history_viewer]).then(reset_textbox, [], [inputs])
+        b3.click(clear_history, [], [chatbot, state, history_viewer]).then(reset_textbox, [], [inputs])
         b2.click(fn=None, inputs=None, outputs=None, cancels=cancel_handles)
         chatbot.change(scroll_to_output=True)
 
@@ -392,8 +446,10 @@ if __name__ == '__main__':
         #     return FileResponse(f"{generate_images}/{filename}")
         #
         # app = gr.routes.App.create_app(this_blocks, timeout=5)
-        #
-        this_blocks.queue(default_concurrency_limit=100, api_open=False, max_size=100)
+
+        # app = FastAPI()
+        this_blocks.queue(max_size=100, )
+        this_blocks.load(read_logs, None, log_viewer, every=1)
         app = gr.routes.App.create_app(this_blocks)
 
 
@@ -412,29 +468,7 @@ if __name__ == '__main__':
             return FileResponse(f"download_pdfs/{filename}")
 
 
-        # gradio_
+        # gradio_app = gr.routes.App.create_app(this_blocks)
+        # app.mount('', gradio_app)
 
-        # app.mount("/", gradio_app)
-
-        # app = gr.mount_gradio_app(app, this_blocks, path="/")
-        # # app.mount("/", StaticFiles(directory="generate", html=True), name="static")
         uvicorn.run(app, host='localhost', port=PORT)
-
-        # app.add_route('/images/{filename}', get_image, methods=['GET'])
-
-        # @app.get("/images/{path:path}")
-        # def build_resource(path: str):
-        #     build_file = safe_join(BUILD_PATH_LIB, path)
-        #     return FileResponse(build_file)
-
-        # @app.get("/file{file_path:path}")
-        # async def file(file_path: str, request: Request):
-        #     # redirect to the "api." host and gradio_tts path
-        #     current_url = request.url
-        #     if "localhost" in current_url.hostname or "127." in current_url.hostname:
-        #         return RedirectResponse(url="http://localhost:8000/gradio_tts/file" + str(file_path))
-        #     return RedirectResponse(url="https://api.text-generator.io/gradio_tts/file" + str(file_path))
-        #
-        # this_blocks.launch(show_error=True, prevent_thread_lock=True, allowed_paths=['generate_images'], show_api=True,
-        #                    max_threads=200, share=True,
-        #                    server_port=PORT)
