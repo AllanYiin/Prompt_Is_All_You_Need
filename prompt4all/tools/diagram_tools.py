@@ -145,7 +145,7 @@ def generate_diagram(di, dt, ss=None):
 
 def exec_mermaid_cli(mermaid_markdown, diagram_type):
     if 'graph TB' in mermaid_markdown:
-        mermaid_markdown = mermaid_markdown.replace('graph LR')
+        mermaid_markdown = mermaid_markdown.replace('graph TB', 'graph LR')
     temfolder = tempfile.gettempdir()
     input_path = os.path.join(temfolder, str(uuid.uuid4().node) + '.mmd')
     with open(input_path, "w") as t:

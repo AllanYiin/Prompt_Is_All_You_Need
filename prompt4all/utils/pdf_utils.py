@@ -946,7 +946,7 @@ class PDF(memories.BaseCache):
                         encoding_format="float"
                     )
 
-                    tf = TextFragment(source=self.fp_path, page_num=pg_num, text=txt,
+                    tf = TextFragment(source=self.fp_path, page_num=pg_num, paragraph_num=n + 1, text=txt,
                                       embeddings=np.array(response.data[0].embedding), time=time.time())
 
                     self.vector_dict[n] = tf

@@ -20,6 +20,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
+from prompt4all import context
 from prompt4all.context import *
 from prompt4all.common import *
 from prompt4all.api.memories import *
@@ -524,7 +525,7 @@ def search_web(url: str) -> list:
                     # 選單
                     if count_words(p.text.strip()) / len(paras) < 10:
                         return []
-                    elif np.array([1.0 if p.strip().startswith('^') else 0.0 for _p in paras if
+                    elif np.array([1.0 if _p.strip().startswith('^') else 0.0 for _p in paras if
                                    len(_p.strip()) > 1]).mean() > 0.9:
                         return []  # 參考文獻、引用
                     group_results = optimal_grouping([count_words(_p.strip()) for _p in paras], min_sum=200,

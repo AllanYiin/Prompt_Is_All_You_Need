@@ -279,7 +279,7 @@ class GptBaseApi:
 
         return payload
 
-    def make_response(self, model, message_with_context, parameters, stream=True):
+    def make_response(self, model, message_with_context, parameters, stream=True, use_tool=True):
         return self.client.chat.completions.create(
             model=model,
             messages=message_with_context,
@@ -290,12 +290,12 @@ class GptBaseApi:
             presence_penalty=parameters.get('presence_penalty'),
             frequency_penalty=parameters.get('frequency_penalty'),
             stream=stream,
-            tools=self.tools,
-            tool_choice=NOT_GIVEN if self.tools == [] else "auto"
+            tools=self.tools if use_tool else [],
+            tool_choice=NOT_GIVEN if not use_tool or self.tools == [] else "auto"
 
         )
 
-    async def make_async_response(self, model, message_with_context, parameters, stream=False):
+    async def make_async_response(self, model, message_with_context, parameters, stream=False, use_tool=True):
         self.functions = functions
         self.aclient = AsyncOpenAI()
         return await self.aclient.chat.completions.acreate(
@@ -308,8 +308,8 @@ class GptBaseApi:
             presence_penalty=parameters.get('presence_penalty'),
             frequency_penalty=parameters.get('frequency_penalty'),
             stream=stream,
-            tools=self.tools,
-            tool_choice=NOT_GIVEN if self.tools == [] else "auto"
+            tools=self.tools if use_tool else [],
+            tool_choice=NOT_GIVEN if not use_tool or self.tools == [] else "auto"
         )
 
     def post_a_streaming_chat(self, input_prompt, context_type, parameters, state):
@@ -360,42 +360,43 @@ class GptBaseApi:
                 self.temp_state = [s for s in self.temp_state if s['role'] != 'status']
                 for chunk in completion:
                     try:
-                        this_choice = chunk_message = chunk.choices[0]
-                        this_delta = this_choice.delta
-                        finish_reason = this_choice.finish_reason
-                        if not this_delta:
-                            break
-                        elif this_delta and this_delta.content:
-                            partial_words += this_delta.content
-                            for i in range(len(self.temp_state)):
-                                if self.temp_state[-i]['role'] == 'assistant':
-                                    self.temp_state[-i]['content'] = partial_words
-                                    break
-                            yield full_history
-
-                        if this_delta.tool_calls:
-                            self.temp_state = [s for s in self.temp_state if s['role'] != 'status']
-                            self.temp_state.append({"role": "status", "content": '解析使用工具需求...'})
-                            for tool_call in this_delta.tool_calls:
-                                index = tool_call.index
-                                if index == len(tool_calls):
-                                    tool_calls.append({})
-                                if tool_call.id:
-                                    tool_calls[index]['id'] = tool_call.id
-                                    tool_calls[index]['type'] = 'function'
-                                if tool_call.function:
-                                    if 'function' not in tool_calls[index]:
-                                        tool_calls[index]['function'] = {}
-                                    if tool_call.function.name:
-                                        tool_calls[index]['function']['name'] = tool_call.function.name
-                                        tool_calls[index]['function']['arguments'] = ''
-                                    if tool_call.function.arguments:
-                                        tool_calls[index]['function']['arguments'] += (
-                                            tool_call.function.arguments)
+                        if chunk and chunk.choices and len(chunk.choices) > 0:
+                            this_choice = chunk.choices[0]
+                            this_delta = this_choice.delta
+                            finish_reason = this_choice.finish_reason
+                            if not this_delta:
+                                break
+                            elif this_delta and this_delta.content:
+                                partial_words += this_delta.content
+                                for i in range(len(self.temp_state)):
+                                    if self.temp_state[-i]['role'] == 'assistant':
+                                        self.temp_state[-i]['content'] = partial_words
+                                        break
                                 yield full_history
 
-                        if finish_reason == 'stop':
-                            break
+                            if this_delta.tool_calls:
+                                self.temp_state = [s for s in self.temp_state if s['role'] != 'status']
+                                self.temp_state.append({"role": "status", "content": '解析使用工具需求...'})
+                                for tool_call in this_delta.tool_calls:
+                                    index = tool_call.index
+                                    if index == len(tool_calls):
+                                        tool_calls.append({})
+                                    if tool_call.id:
+                                        tool_calls[index]['id'] = tool_call.id
+                                        tool_calls[index]['type'] = 'function'
+                                    if tool_call.function:
+                                        if 'function' not in tool_calls[index]:
+                                            tool_calls[index]['function'] = {}
+                                        if tool_call.function.name:
+                                            tool_calls[index]['function']['name'] = tool_call.function.name
+                                            tool_calls[index]['function']['arguments'] = ''
+                                        if tool_call.function.arguments:
+                                            tool_calls[index]['function']['arguments'] += (
+                                                tool_call.function.arguments)
+                                    yield full_history
+
+                            if finish_reason == 'stop':
+                                break
 
                     except Exception as e:
                         finish_reason = '[EXCEPTION]'
@@ -426,22 +427,23 @@ class GptBaseApi:
 
                 for chunk in completion2:
                     try:
-                        this_choice = chunk.choices[0]
-                        this_delta = this_choice.delta
-                        finish_reason = this_choice.finish_reason
-                        # if (
-                        #         'data: [DONE]' in this_choice):  # or (len(json.loads(chunk_decoded[6:])['choices'][0]["delta"]) == 0):
-                        #     finish_reason = '[DONE]'
-                        #     break
+                        if chunk and chunk.choices and len(chunk.choices) > 0:
+                            this_choice = chunk.choices[0]
+                            this_delta = this_choice.delta
+                            finish_reason = this_choice.finish_reason
+                            # if (
+                            #         'data: [DONE]' in this_choice):  # or (len(json.loads(chunk_decoded[6:])['choices'][0]["delta"]) == 0):
+                            #     finish_reason = '[DONE]'
+                            #     break
 
-                        if this_choice.delta.content is not None:
-                            partial_words += this_delta.content
-                            for i in range(len(self.temp_state)):
-                                if self.temp_state[-i]['role'] == 'assistant':
-                                    self.temp_state[-i]['content'] = partial_words
-                                    break
-                            token_counter += 1
-                        yield full_history
+                            if this_choice.delta.content is not None:
+                                partial_words += this_delta.content
+                                for i in range(len(self.temp_state)):
+                                    if self.temp_state[-i]['role'] == 'assistant':
+                                        self.temp_state[-i]['content'] = partial_words
+                                        break
+                                token_counter += 1
+                                yield full_history
                     except Exception as e:
                         finish_reason = '[EXCEPTION]'
                         if len(partial_words) == 0:
@@ -467,9 +469,9 @@ class GptBaseApi:
                     function_name = tool_call['function']['name']
                     self.temp_state = [s for s in self.temp_state if s['role'] != 'status']
                     self.temp_state.append({"role": "status", "content": '使用工具:{0}中...'.format(function_name)})
+                    function_response = None
                     try:
                         function_to_call = get_tool(function_name)
-
                         function_args = json.loads(tool_call['function']['arguments'])
                         yield full_history
                         print(blue_color('tool_call:{0}  {1}'.format(function_name, function_args)), flush=True)
@@ -628,7 +630,7 @@ class GptBaseApi:
         try:
             if len(full_history) == 0:
                 full_history = message_context
-            completion = self.make_response(self.API_MODEL, message_context, parameters, stream=True)
+            completion = self.make_response(self.API_MODEL, message_context, parameters, stream=True, use_tool=False)
 
             finish_reason = 'None'
             full_history.append({"role": "assistant", "content": partial_words, "context_type": context_type})
@@ -652,23 +654,24 @@ class GptBaseApi:
                         break
                 answer = full_history[-1]['content']
                 yield answer, full_history
-            while finish_reason != 'stop' and finish_reason != '[EXCEPTION]':
+            while finish_reason == 'length':
                 # 自動以user角色發出「繼續寫下去」的PROMPT
                 prompt = "繼續"
                 # 調用openai.ChatCompletion.create來生成機器人的回答
                 message_context, context_tokens = self.process_context(prompt, context_type)
-                completion2 = self.make_response(self.API_MODEL, message_context, parameters, stream=True)
-
+                completion2 = self.make_response(self.API_MODEL, message_context, parameters, stream=True,
+                                                 use_tool=False)
                 for chunk in completion2:
                     try:
-                        this_choice = chunk_message = chunk.choices[0]
-                        this_delta = this_choice.delta
-                        finish_reason = this_choice.finish_reason
+                        if chunk and chunk.choices and len(chunk.choices) > 0:
+                            this_choice = chunk.choices[0]
+                            this_delta = this_choice.delta
+                            finish_reason = this_choice.finish_reason
 
-                        if this_delta.content is not None:
-                            partial_words += this_delta.content
-                            full_history[-1]['content'] = partial_words
-                            token_counter += 1
+                            if this_delta.content is not None:
+                                partial_words += this_delta.content
+                                full_history[-1]['content'] = partial_words
+                                token_counter += 1
                     except Exception as e:
                         if len(partial_words) == 0:
                             pass

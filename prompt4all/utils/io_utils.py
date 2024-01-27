@@ -39,9 +39,9 @@ def process_file(file, state):
     else:
         folder, filename, ext = context.split_path(file.name)
         if file.name.lower().endswith('.pdf'):
-            _pdfdoc = pdf_utils.PDFDoc(file.name)
+            _pdfdoc = pdf_utils.PDF(file.name)
             _pdfdoc.parsing_save()
-            _pdf.vectorization()
+            _pdfdoc.vectorization()
             yield return_text, state
         else:
             with open(file.name, encoding="utf-8") as f:
